@@ -8,18 +8,30 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 
 export default function WalletDashboard() {
-  const [credits, setCredits] = useState(45.2);
+  // Mock data
+  const [user] = useState({
+    name: "Sophie",
+    credits: 73.5,
+    progress: 73,
+  });
 
   const payments = [
-    { date: "02 Nov 2025", type: "Rent", amount: 500, credits: 25, status: "Paid" },
-    { date: "15 Oct 2025", type: "Electricity", amount: 60, credits: 3, status: "Paid" },
-    { date: "01 Oct 2025", type: "Water", amount: 35, credits: 1.75, status: "Paid" },
+    { date: "03 Nov 2025", type: "Rent", amount: 550, credits: 27.5, status: "Paid" },
+    { date: "18 Oct 2025", type: "Electricity", amount: 68, credits: 3.4, status: "Paid" },
+    { date: "10 Oct 2025", type: "Wi-Fi", amount: 25, credits: 1.25, status: "Paid" },
+    { date: "01 Oct 2025", type: "Water", amount: 36, credits: 1.8, status: "Paid" },
+    { date: "20 Sep 2025", type: "Gas", amount: 54, credits: 2.7, status: "Paid" },
+    { date: "15 Sep 2025", type: "Rent", amount: 550, credits: 27.5, status: "Paid" },
+    { date: "05 Sep 2025", type: "Electricity", amount: 60, credits: 3.0, status: "Paid" },
   ];
 
   const perks = [
-    { title: "Apply to Rent", desc: "Use £10 credit for rent discount", cost: 10 },
-    { title: "Coffee Voucher", desc: "Redeem £5 credit for coffee", cost: 5 },
-    { title: "Gym Pass", desc: "3-day gym access for £8 credit", cost: 8 },
+    { title: "Apply to Rent", desc: "Use £10 credit to reduce next month's rent payment.", cost: 10 },
+    { title: "Coffee Voucher", desc: "Grab your morning coffee with £5 credit at Caffè Nero.", cost: 5 },
+    { title: "Gym Pass", desc: "Access to the university gym for 3 days with £8 credit.", cost: 8 },
+    { title: "Uber Ride Credit", desc: "Get £7 off your next Uber trip.", cost: 7 },
+    { title: "Amazon Gift Card", desc: "Redeem £15 Amazon gift card.", cost: 15 },
+    { title: "Spotify Premium", desc: "1-month Spotify Premium subscription.", cost: 10 },
   ];
 
   return (
@@ -28,19 +40,21 @@ export default function WalletDashboard() {
       <Card className="mb-8 shadow-lg bg-white/70 backdrop-blur-md border-blue-100">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold flex justify-between items-center">
-            <span>Welcome back, Alex 👋</span>
-            <Button variant="outline">Earn More Credits</Button>
+            <span>Welcome back, {user.name} 👋</span>
+            <Button variant="outline" className="hover:bg-blue-100">
+              Earn More Credits
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex justify-between items-center">
             <div>
               <p className="text-sm text-gray-500">Current Reward Balance</p>
-              <h2 className="text-4xl font-bold text-blue-600">£{credits.toFixed(2)}</h2>
-              <p className="text-sm text-gray-400 mt-1">🎯 45% towards next reward</p>
+              <h2 className="text-4xl font-bold text-blue-600">£{user.credits.toFixed(2)}</h2>
+              <p className="text-sm text-gray-400 mt-1">🎯 {user.progress}% towards next reward goal</p>
             </div>
             <div className="w-1/3">
-              <Progress value={45} className="h-3" />
+              <Progress value={user.progress} className="h-3" />
             </div>
           </div>
         </CardContent>
@@ -76,7 +90,7 @@ export default function WalletDashboard() {
                       key={i}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.1 }}
+                      transition={{ delay: i * 0.05 }}
                       className="border-b hover:bg-blue-50"
                     >
                       <td>{p.date}</td>
@@ -102,17 +116,17 @@ export default function WalletDashboard() {
                 key={i}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.1 }}
+                transition={{ delay: i * 0.05 }}
               >
-                <Card className="hover:shadow-lg transition-shadow">
+                <Card className="hover:shadow-lg transition-shadow border-blue-100">
                   <CardHeader>
                     <CardTitle className="text-lg">{perk.title}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-gray-500 mb-2">{perk.desc}</p>
                     <Button
-                      disabled={credits < perk.cost}
-                      onClick={() => setCredits(credits - perk.cost)}
+                      disabled={user.credits < perk.cost}
+                      onClick={() => alert(`Redeemed ${perk.title} for £${perk.cost}`)}
                       className="w-full"
                     >
                       Redeem for £{perk.cost}
