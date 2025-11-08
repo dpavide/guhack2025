@@ -1,51 +1,142 @@
 "use client";
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export default function BillsPage() {
+  const [bills, setBills] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchBills = async () => {
+      setLoading(true);
+
+      // Get logged-in user
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        console.error("User not logged in", userError);
+        setLoading(false);
+        return;
+      }
+
+      setUser(user);
+
+      // Fetch all bills for that user
+      const { data, error } = await supabase
+        .from("bills")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("due_date", { ascending: true });
+
+      if (error) console.error("Error fetching bills:", error);
+      else setBills(data || []);
+
+      setLoading(false);
+    };
+
+    fetchBills();
+  }, []);
+
+  // Handle paying a specific bill
+  const handlePayment = async (billId: string) => {
+    const { error } = await supabase
+      .from("bills")
+      .update({ status: "paid" })
+      .eq("id", billId);
+
+    if (error) {
+      console.error("Payment failed:", error);
+      alert("Payment failed. Try again.");
+    } else {
+      alert("Payment successful!");
+      // Refresh bills
+      setBills((prev) =>
+        prev.map((b) => (b.id === billId ? { ...b, status: "paid" } : b))
+      );
+    }
+  };
+
+  if (loading)
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading your bills...</p>
+      </div>
+    );
+
+  if (!bills.length)
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>No bills found 🎉</p>
+      </div>
+    );
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8 flex flex-col items-center justify-center">
-      <div className="w-full max-w-2xl">
-        {/* Bills Title */}
-        <h1 className="text-3xl font-bold text-gray-800 mb-8 text-center">Bills</h1>
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8 flex flex-col items-center">
+      <div className="w-full max-w-3xl">
+        <h1 className="text-3xl font-bold text-gray-800 mb-8 text-center">
+          Your Bills
+        </h1>
 
-        {/* Next Payment Section */}
-        <h2 className="text-xl font-semibold text-gray-700 mb-4 text-center">Next payment</h2>
+        <div className="space-y-6">
+          {bills.map((bill) => (
+            <Card
+              key={bill.id}
+              className={`shadow-lg backdrop-blur-md ${
+                bill.status === "paid"
+                  ? "bg-green-50 border-green-200"
+                  : "bg-white/70 border-blue-100"
+              }`}
+            >
+              <CardContent className="pt-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">{bill.title}</p>
+                    <p className="text-2xl font-bold text-gray-800">
+                      GBP {bill.amount.toFixed(2)}
+                    </p>
+                  </div>
 
-        {/* Payment Information Frame */}
-        <Card className="shadow-lg bg-white/70 backdrop-blur-md border-blue-100">
-          <CardContent className="pt-6">
-            <div className="space-y-6">
-              {/* Amount Due and Bill Date - Side by Side */}
-              <div className="flex gap-8 justify-between">
-                {/* Amount Due */}
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Amount due</p>
-                  <p className="text-2xl font-bold text-gray-800">GBP 24</p>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500 mb-1">Due</p>
+                    <p className="text-lg font-medium text-gray-800">
+                      {new Date(bill.due_date).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "long",
+                      })}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Bill Date */}
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Bill date</p>
-                  <p className="text-lg font-medium text-gray-800">4th June</p>
+                <div className="flex gap-4 pt-4">
+                  {bill.status === "unpaid" ? (
+                    <Button
+                      className="flex-1"
+                      size="lg"
+                      onClick={() => handlePayment(bill.id)}
+                    >
+                      Pay now
+                    </Button>
+                  ) : (
+                    <Button disabled className="flex-1" size="lg">
+                      Paid
+                    </Button>
+                  )}
+                  <Button variant="outline" className="flex-1" size="lg">
+                    View details
+                  </Button>
                 </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-4 pt-4">
-                <Button className="flex-1" size="lg">
-                  Pay now
-                </Button>
-                <Button variant="outline" className="flex-1" size="lg">
-                  View history
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
-
