@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import LayoutClient from "@/components/LayoutClient";
 
 export const metadata: Metadata = {
   title: "GUHack2025 - Next.js + FastAPI",
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        {children}
+        <LayoutClient>{children}</LayoutClient>
       </body>
     </html>
   );
