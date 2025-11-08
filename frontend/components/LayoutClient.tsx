@@ -18,7 +18,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {!isAuthPage && (
         <nav className="bg-white shadow p-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold text-indigo-600">Housr</h1>
+          <h1 className="text-xl font-bold text-indigo-600">Splitr</h1>
           <div className="flex gap-6 items-center">
             <Link href="/dashboard" className="hover:text-indigo-600">
               Dashboard
