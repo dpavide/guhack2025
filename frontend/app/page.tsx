@@ -21,7 +21,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex flex-col items-center justify-center h-screen gap-4 bg-gradient-to-br from-indigo-100 to-purple-200">
-      <h1 className="text-3xl font-bold">Welcome to Housr</h1>
+      <h1 className="text-3xl font-bold">Welcome to Splitr</h1>
       <input
         className="p-2 rounded border w-64"
         placeholder="Email"
