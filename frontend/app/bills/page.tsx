@@ -131,7 +131,7 @@ export default function BillsPage() {
     );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8 flex flex-col items-center">
+    <div className="min-h-screen bg-linear-to-b from-blue-50 to-white p-8 flex flex-col items-center">
       <div className="w-full max-w-3xl">
         <h1 className="text-3xl font-bold text-gray-800 mb-8 text-center">
           Your Bills

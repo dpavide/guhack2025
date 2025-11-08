@@ -45,7 +45,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-emerald-50 to-teal-100 p-4">
       <div className="w-full max-w-sm bg-white rounded-lg shadow p-6 space-y-4">
         <h1 className="text-2xl font-bold">Log in</h1>
         {error && (

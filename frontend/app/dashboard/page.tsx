@@ -12,6 +12,7 @@ export default function WalletDashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
   const [redemptions, setRedemptions] = useState<any[]>([]);
+  const [userGoal, setUserGoal] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   // 🔁 Fetch all user-related data
@@ -79,6 +80,34 @@ export default function WalletDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Read front-end only goal from localStorage and listen for changes.
+  // We only use the stored goal if it matches the current profile user id (or if profile is not loaded yet we still allow it).
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("user_goal");
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!profile?.id || parsed.user_id === profile.id) {
+          setUserGoal(parsed);
+        }
+      } catch (e) {
+        console.error("Failed to parse user_goal from localStorage", e);
+      }
+    };
+
+    load();
+
+    const handler = (ev: any) => {
+      const detail = ev?.detail ?? null;
+      if (!detail) return;
+      if (!profile?.id || detail.user_id === profile.id) setUserGoal(detail);
+    };
+
+    window.addEventListener("goalChanged", handler as EventListener);
+    return () => window.removeEventListener("goalChanged", handler as EventListener);
+  }, [profile?.id]);
+
   if (loading)
     return (
       <div className="p-10 text-center text-gray-500">
@@ -89,7 +118,7 @@ export default function WalletDashboard() {
   const currentCredits = profile?.credits || 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8">
+    <div className="min-h-screen bg-linear-to-b from-blue-50 to-white p-8">
       {/* 👋 Header */}
       <Card className="mb-8 shadow-lg bg-white/70 backdrop-blur-md border-blue-100">
         <CardHeader>
@@ -111,13 +140,17 @@ export default function WalletDashboard() {
               <h2 className="text-4xl font-bold text-blue-600">
                 £{currentCredits.toFixed(2)}
               </h2>
-              <p className="text-sm text-gray-400 mt-1">
-                🎯 {Math.min(100, Math.round(currentCredits))}% towards next reward
-              </p>
+              {userGoal ? (
+                <p className="text-sm text-gray-400 mt-1">
+                  🎯 {Math.min(100, Math.round((currentCredits / userGoal.credit_goal) * 100))}% towards {userGoal.item_name}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-400 mt-1">🎯 Visit rewards to set a goal</p>
+              )}
             </div>
             <div className="w-1/3">
               <Progress
-                value={Math.min(100, currentCredits)}
+                value={userGoal ? Math.min(100, (currentCredits / userGoal.credit_goal) * 100) : Math.min(100, currentCredits)}
                 className="h-3"
               />
             </div>

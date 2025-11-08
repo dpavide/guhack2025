@@ -23,6 +23,27 @@ export default function RewardsPage() {
   const [shopItems, setShopItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [currentGoal, setCurrentGoal] = useState<any>(null);
+
+  // Listen for goal changes from other components
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const savedGoal = localStorage.getItem("user_goal");
+      setCurrentGoal(savedGoal ? JSON.parse(savedGoal) : null);
+    };
+
+    // Initial check
+    handleStorageChange();
+
+    // Listen for changes
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("goalChanged", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("goalChanged", handleStorageChange);
+    };
+  }, []);
 
   // Fetch profile + shop items
   useEffect(() => {
@@ -74,10 +95,10 @@ export default function RewardsPage() {
       return;
     }
 
-    const confirm = window.confirm(
+    const confirmRedeem = window.confirm(
       `Redeem ${item.item_name} for ${item.credit_cost} credits?`
     );
-    if (!confirm) return;
+    if (!confirmRedeem) return;
 
     const newCredits = credits - item.credit_cost;
 
@@ -119,11 +140,23 @@ export default function RewardsPage() {
     );
 
   return (
+<<<<<<< HEAD
     <div className="min-h-screen bg-gray-50">
       {/* Clean Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
+=======
+    <div className="min-h-screen bg-linear-to-b from-blue-50 to-white p-8">
+      <Card className="mb-8 shadow-lg bg-white/80 backdrop-blur-md border-blue-100">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold">
+            🎁 Rewards & Credit Shop
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-between items-center">
+>>>>>>> main
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 Rewards Shop
@@ -144,6 +177,7 @@ export default function RewardsPage() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Rewards Grid */}
       <div className="container mx-auto px-6 py-8">
         {shopItems.length === 0 ? (
@@ -239,6 +273,74 @@ export default function RewardsPage() {
             })}
           </div>
         )}
+=======
+      <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {shopItems.map((item) => (
+          <motion.div
+            key={item.shop_item_id}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.05 }}
+          >
+            <Card className="hover:shadow-lg transition-shadow border-blue-100">
+              <CardHeader>
+                <CardTitle className="text-lg">{item.item_name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500 mb-2">{item.item_description}</p>
+                <p className="font-semibold mb-3">
+                  Cost: {item.credit_cost} credits
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={credits < item.credit_cost}
+                    onClick={() => handleRedeem(item)}
+                    className="flex-1"
+                  >
+                    {credits < item.credit_cost ? "Not Enough Credits" : "Redeem"}
+                  </Button>
+
+                  {(() => {
+                    const isCurrentGoal = currentGoal && currentGoal.shop_item_id === item.shop_item_id;
+                    
+                    return (
+                      <Button
+                        variant={isCurrentGoal ? "default" : "outline"}
+                        className={`flex-1 ${isCurrentGoal ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                        onClick={() => {
+                          // Pure front-end: save goal into localStorage and notify listeners
+                          if (!userId) {
+                            alert("Please sign in to set a goal");
+                            return;
+                          }
+
+                          const goal = {
+                            shop_item_id: item.shop_item_id,
+                            item_name: item.item_name,
+                            credit_goal: item.credit_cost,
+                            user_id: userId,
+                          };
+
+                          try {
+                            localStorage.setItem("user_goal", JSON.stringify(goal));
+                            // dispatch a custom event so dashboard (if open) updates immediately
+                            window.dispatchEvent(new CustomEvent("goalChanged", { detail: goal }));
+                          } catch (err) {
+                            console.error("Failed to save goal to localStorage", err);
+                          }
+                        }}
+                        disabled={!userId}
+                      >
+                        {isCurrentGoal ? '✨ Current Goal' : 'Set as Goal'}
+                      </Button>
+                    );
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+>>>>>>> main
       </div>
     </div>
   );
