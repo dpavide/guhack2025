@@ -62,10 +62,10 @@ export default function RewardsPage() {
       return;
     }
 
-    const confirm = window.confirm(
+    const confirmRedeem = window.confirm(
       `Redeem ${item.item_name} for ${item.credit_cost} credits?`
     );
-    if (!confirm) return;
+    if (!confirmRedeem) return;
 
     const newCredits = credits - item.credit_cost;
 
@@ -102,7 +102,7 @@ export default function RewardsPage() {
     );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8">
+    <div className="min-h-screen bg-linear-to-b from-blue-50 to-white p-8">
       <Card className="mb-8 shadow-lg bg-white/80 backdrop-blur-md border-blue-100">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold">
@@ -138,13 +138,47 @@ export default function RewardsPage() {
                 <p className="font-semibold mb-3">
                   Cost: {item.credit_cost} credits
                 </p>
-                <Button
-                  disabled={credits < item.credit_cost}
-                  onClick={() => handleRedeem(item)}
-                  className="w-full"
-                >
-                  {credits < item.credit_cost ? "Not Enough Credits" : "Redeem"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={credits < item.credit_cost}
+                    onClick={() => handleRedeem(item)}
+                    className="flex-1"
+                  >
+                    {credits < item.credit_cost ? "Not Enough Credits" : "Redeem"}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      // Pure front-end: save goal into localStorage and notify listeners
+                      if (!userId) {
+                        alert("Please sign in to set a goal");
+                        return;
+                      }
+
+                      const goal = {
+                        shop_item_id: item.shop_item_id,
+                        item_name: item.item_name,
+                        credit_goal: item.credit_cost,
+                        user_id: userId,
+                      };
+
+                      try {
+                        localStorage.setItem("user_goal", JSON.stringify(goal));
+                        // dispatch a custom event so dashboard (if open) updates immediately
+                        window.dispatchEvent(new CustomEvent("goalChanged", { detail: goal }));
+                        alert(`Goal set locally: ${item.item_name} (${item.credit_cost} credits)`);
+                      } catch (err) {
+                        console.error("Failed to save goal to localStorage", err);
+                        alert("Failed to set goal locally");
+                      }
+                    }}
+                    disabled={!userId}
+                  >
+                    Set as Goal
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </motion.div>
