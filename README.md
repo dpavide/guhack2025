@@ -39,12 +39,12 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 3. Install dependencies:
 ```bash
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 4. Run the backend server:
 ```bash
-python3 main.py
+python main.py
 ```
 
 The API will be available at `http://localhost:8000`
