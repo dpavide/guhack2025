@@ -2,3 +2,6 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 pydantic==2.10.1
 python-multipart==0.0.17
+supabase==2.9.0
+python-dotenv==1.0.0
+requests==2.31.0

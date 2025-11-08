@@ -1,0 +1,79 @@
+# 启动说明
+
+## 修复内容
+
+### 1. API端口问题 ✅
+- 修改前端API地址从 `8000` 改为 `8001`
+- 文件：`frontend/lib/rewardApi.ts`
+
+### 2. 用户名显示问题 ✅
+- 修改为从后端API返回的 `UserName` 获取（对应数据库 `profiles.full_name`）
+- 文件：`frontend/app/rewards/page.tsx`
+
+## 启动步骤
+
+### 1. 启动后端
+```powershell
+cd E:\Project\guhack2025\backend
+python -m uvicorn main:app --reload --port 8001
+```
+
+确认看到：
+```
+INFO: Application startup complete.
+```
+
+### 2. 启动前端（新终端）
+```powershell
+cd E:\Project\guhack2025\frontend
+npm run dev
+```
+
+### 3. 访问应用
+- 前端: http://localhost:3000
+- 后端: http://localhost:8001
+- API文档: http://localhost:8001/docs
+- 奖励页面: http://localhost:3000/rewards
+
+## 测试
+
+### 测试用户名显示
+1. 登录系统
+2. 访问 `/rewards` 页面
+3. 应该看到 "Welcome back, [你的名字]"（从 `profiles.full_name` 获取）
+
+### 测试API连接
+```powershell
+cd backend
+python test_api_quick.py
+```
+
+应该看到：
+```
+✅ Health check: 200
+✅ Rewards endpoint: 200
+   Found 9 rewards
+✅ Users endpoint: 200
+   Found X users
+```
+
+## 问题排查
+
+### NetworkError
+- 确保后端在 8001 端口运行
+- 检查 `frontend/lib/rewardApi.ts` 中的 API_BASE_URL
+- 检查防火墙设置
+
+### 用户名显示 "User"
+- 确保数据库 `profiles` 表有 `full_name` 字段
+- 检查用户注册时是否填写了名字
+- 在数据库中手动更新：
+  ```sql
+  UPDATE profiles SET full_name = '你的名字' WHERE email = '你的邮箱';
+  ```
+
+---
+
+**状态**: ✅ 已修复
+**后端**: http://localhost:8001 (运行中)
+**前端**: 需要启动 `npm run dev`

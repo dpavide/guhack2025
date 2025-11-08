@@ -3,16 +3,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 
+# Import reward router
+from reward import router as reward_router
+
 app = FastAPI(title="GUHack2025 API", version="1.0.0")
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js default port
+    allow_origins=[
+        "http://localhost:3000",  # Next.js default port
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include reward system router
+app.include_router(reward_router)
 
 class Item(BaseModel):
     id: int
@@ -27,7 +36,7 @@ items = [
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to GUHack2025 API", "status": "running"}
+    return {"message": "Welcome to GUHack2025 Reward System API", "status": "running"}
 
 @app.get("/api/health")
 async def health_check():
