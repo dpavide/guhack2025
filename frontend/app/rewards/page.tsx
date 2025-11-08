@@ -167,7 +167,7 @@ export default function RewardsPage() {
             </div>
             
             {/* Credits Display */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl px-6 py-4">
+            <div className="bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl px-6 py-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl font-bold text-blue-600">{credits.toFixed(0)}</span>
                 <span className="text-gray-600 font-medium">credits</span>
@@ -205,7 +205,7 @@ export default function RewardsPage() {
                       : 'opacity-60 border-gray-200'
                   }`}>
                     {/* Product Image */}
-                    <div className="relative w-full h-48 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+                    <div className="relative w-full h-48 bg-linear-to-br from-gray-50 to-gray-100 overflow-hidden">
                       {itemImage ? (
                         <Image
                           src={itemImage}
