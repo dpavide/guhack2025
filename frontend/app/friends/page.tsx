@@ -37,32 +37,70 @@ export default function FriendsPage() {
 
   // Fetch accepted friends
   const fetchFriends = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("friends")
       .select("friend_id, profiles!friends_friend_id_fkey(username, id)")
       .eq("user_id", user.id)
       .eq("status", "accepted");
-    setFriends(data?.map((f) => f.profiles) || []);
+
+    if (error) {
+      console.error("Error fetching friends:", error);
+      setFriends([]);
+      return;
+    }
+
+    // Supabase may return the joined `profiles` as an array (even when single)
+    // normalize to always use the first element or the object itself.
+    const normalized = (data || []).map((f: any) => {
+      const p = f?.profiles;
+      return Array.isArray(p) ? p[0] : p;
+    }).filter(Boolean) as Profile[];
+
+    setFriends(normalized);
   };
 
   // Fetch received requests
   const fetchPendingRequests = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("friends")
       .select("id, user_id, profiles!friends_user_id_fkey(username, id)")
       .eq("friend_id", user.id)
       .eq("status", "pending");
-    setPendingRequests(data || []);
+
+    if (error) {
+      console.error("Error fetching pending friend requests:", error);
+      setPendingRequests([]);
+      return;
+    }
+
+    const normalized = (data || []).map((r: any) => ({
+      ...r,
+      profiles: Array.isArray(r.profiles) ? r.profiles[0] : r.profiles,
+    }));
+
+    setPendingRequests(normalized);
   };
 
   // Fetch sent requests
   const fetchSentRequests = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("friends")
       .select("id, friend_id, profiles!friends_friend_id_fkey(username, id)")
       .eq("user_id", user.id)
       .eq("status", "pending");
-    setSentRequests(data || []);
+
+    if (error) {
+      console.error("Error fetching sent friend requests:", error);
+      setSentRequests([]);
+      return;
+    }
+
+    const normalized = (data || []).map((r: any) => ({
+      ...r,
+      profiles: Array.isArray(r.profiles) ? r.profiles[0] : r.profiles,
+    }));
+
+    setSentRequests(normalized);
   };
 
   // Search for users
