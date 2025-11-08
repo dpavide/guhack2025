@@ -14,7 +14,7 @@ export default function BillsPage() {
     const fetchBills = async () => {
       setLoading(true);
 
-      // Get logged-in user
+      // 🧠 Get logged-in user
       const {
         data: { user },
         error: userError,
@@ -28,7 +28,7 @@ export default function BillsPage() {
 
       setUser(user);
 
-      // Fetch all bills for that user
+      // 📋 Fetch all bills for this user
       const { data, error } = await supabase
         .from("bills")
         .select("*")
@@ -44,35 +44,24 @@ export default function BillsPage() {
     fetchBills();
   }, []);
 
-  // Handle paying a specific bill
-  const handlePayment = async (bill: any) => {
-    if (!user) return;
+  // 💳 Handle paying a bill
+  const handlePayment = async (billId: string) => {
+    const bill = bills.find((b) => b.id === billId);
+    if (!bill) return alert("Bill not found!");
 
-    // 1. Ensure profile exists
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile) {
-      alert("Profile missing. Cannot pay bill.");
-      return;
-    }
-
-    // 2. Mark the bill as paid
-    const { error: billError } = await supabase
+    // 1️⃣ Update bill status
+    const { error: updateError } = await supabase
       .from("bills")
       .update({ status: "paid" })
-      .eq("id", bill.id);
+      .eq("id", billId);
 
-    if (billError) {
-      console.error("Payment failed:", billError);
+    if (updateError) {
+      console.error("Error updating bill:", updateError);
       alert("Payment failed. Try again.");
       return;
     }
 
-    // 3. Insert into payments
+    // 2️⃣ Insert record into payments table (matching your schema)
     const { error: paymentError } = await supabase.from("payments").insert([
       {
         user_id: user.id,
@@ -83,16 +72,19 @@ export default function BillsPage() {
     ]);
 
     if (paymentError) {
-      console.error("Failed to record payment:", paymentError);
-      alert("Payment was made, but could not record transaction.");
+      console.error("Error inserting payment:", paymentError);
+      alert("Bill marked as paid, but payment not logged!");
+    } else {
+      console.log("✅ Payment recorded successfully");
+      alert("✅ Payment successful!");
     }
 
-    // 4. Update local bills state
+    // 3️⃣ Update UI instantly
     setBills((prev) =>
-      prev.map((b) => (b.id === bill.id ? { ...b, status: "paid" } : b))
+      prev.map((b) => (b.id === billId ? { ...b, status: "paid" } : b))
     );
-
   };
+
 
   if (loading)
     return (
@@ -150,7 +142,7 @@ export default function BillsPage() {
                     <Button
                       className="flex-1"
                       size="lg"
-                      onClick={() => handlePayment(bill)}
+                      onClick={() => handlePayment(bill.id)}
                     >
                       Pay now
                     </Button>
