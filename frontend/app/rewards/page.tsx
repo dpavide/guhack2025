@@ -27,6 +27,9 @@ const getItemImage = (itemName: string): string | null => {
   // Starbucks
   if (name.includes("starbucks")) return "/starbucks10pound.jpg";
   
+  // Amazon
+  if (name.includes("amazon")) return "/amazon.jpg";
+  
   return null; // no image available
 };
 
