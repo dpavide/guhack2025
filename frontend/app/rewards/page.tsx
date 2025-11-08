@@ -11,6 +11,27 @@ export default function RewardsPage() {
   const [shopItems, setShopItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [currentGoal, setCurrentGoal] = useState<any>(null);
+
+  // Listen for goal changes from other components
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const savedGoal = localStorage.getItem("user_goal");
+      setCurrentGoal(savedGoal ? JSON.parse(savedGoal) : null);
+    };
+
+    // Initial check
+    handleStorageChange();
+
+    // Listen for changes
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("goalChanged", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("goalChanged", handleStorageChange);
+    };
+  }, []);
 
   // Fetch profile + shop items
   useEffect(() => {
@@ -147,37 +168,43 @@ export default function RewardsPage() {
                     {credits < item.credit_cost ? "Not Enough Credits" : "Redeem"}
                   </Button>
 
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      // Pure front-end: save goal into localStorage and notify listeners
-                      if (!userId) {
-                        alert("Please sign in to set a goal");
-                        return;
-                      }
+                  {(() => {
+                    const isCurrentGoal = currentGoal && currentGoal.shop_item_id === item.shop_item_id;
+                    
+                    return (
+                      <Button
+                        variant={isCurrentGoal ? "default" : "outline"}
+                        className={`flex-1 ${isCurrentGoal ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                        onClick={() => {
+                          // Pure front-end: save goal into localStorage and notify listeners
+                          if (!userId) {
+                            alert("Please sign in to set a goal");
+                            return;
+                          }
 
-                      const goal = {
-                        shop_item_id: item.shop_item_id,
-                        item_name: item.item_name,
-                        credit_goal: item.credit_cost,
-                        user_id: userId,
-                      };
+                          const goal = {
+                            shop_item_id: item.shop_item_id,
+                            item_name: item.item_name,
+                            credit_goal: item.credit_cost,
+                            user_id: userId,
+                          };
 
-                      try {
-                        localStorage.setItem("user_goal", JSON.stringify(goal));
-                        // dispatch a custom event so dashboard (if open) updates immediately
-                        window.dispatchEvent(new CustomEvent("goalChanged", { detail: goal }));
-                        alert(`Goal set locally: ${item.item_name} (${item.credit_cost} credits)`);
-                      } catch (err) {
-                        console.error("Failed to save goal to localStorage", err);
-                        alert("Failed to set goal locally");
-                      }
-                    }}
-                    disabled={!userId}
-                  >
-                    Set as Goal
-                  </Button>
+                          try {
+                            localStorage.setItem("user_goal", JSON.stringify(goal));
+                            // dispatch a custom event so dashboard (if open) updates immediately
+                            window.dispatchEvent(new CustomEvent("goalChanged", { detail: goal }));
+                            alert(`Goal set locally: ${item.item_name} (${item.credit_cost} credits)`);
+                          } catch (err) {
+                            console.error("Failed to save goal to localStorage", err);
+                            alert("Failed to set goal locally");
+                          }
+                        }}
+                        disabled={!userId}
+                      >
+                        {isCurrentGoal ? '✨ Current Goal' : 'Set as Goal'}
+                      </Button>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
