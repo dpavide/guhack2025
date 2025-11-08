@@ -11,24 +11,24 @@ import { motion } from "framer-motion";
 export default function WalletDashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
-  const [rewards, setRewards] = useState<any>(null);
   const [redemptions, setRedemptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 🔁 Fetch all user-related data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
 
       // 1️⃣ Get authenticated user
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
         window.location.href = "/login";
         return;
       }
 
       const userId = authData.user.id;
 
-      // 2️⃣ Fetch user profile
+      // 2️⃣ Fetch user profile (includes credits)
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("*")
@@ -37,16 +37,7 @@ export default function WalletDashboard() {
 
       if (profileError) console.error("Profile error:", profileError);
 
-      // 3️⃣ Fetch user rewards
-      const { data: rewardData, error: rewardError } = await supabase
-        .from("rewards")
-        .select("*")
-        .eq("user_id", userId)
-        .single();
-
-      if (rewardError) console.error("Reward error:", rewardError);
-
-      // 4️⃣ Fetch payments + related bills (JOIN)
+      // 3️⃣ Fetch payments + related bills
       const { data: paymentData, error: paymentError } = await supabase
         .from("payments")
         .select(`
@@ -66,7 +57,7 @@ export default function WalletDashboard() {
 
       if (paymentError) console.error("Payments error:", paymentError);
 
-      // 5️⃣ Fetch redemptions
+      // 4️⃣ Fetch redemptions (if exists)
       const { data: redemptionData, error: redemptionError } = await supabase
         .from("redemptions")
         .select("*")
@@ -76,19 +67,26 @@ export default function WalletDashboard() {
       if (redemptionError) console.error("Redemptions error:", redemptionError);
 
       setProfile(profileData);
-      setRewards(rewardData);
       setPayments(paymentData || []);
       setRedemptions(redemptionData || []);
       setLoading(false);
     };
 
     fetchData();
+
+    // ♻️ Optional: auto-refresh dashboard every 15 seconds
+    const interval = setInterval(fetchData, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   if (loading)
-    return <div className="p-10 text-center text-gray-500">Loading dashboard...</div>;
+    return (
+      <div className="p-10 text-center text-gray-500">
+        Loading dashboard...
+      </div>
+    );
 
-  const currentCredits = rewards?.total_credits || 0;
+  const currentCredits = profile?.credits || 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8">
@@ -97,24 +95,31 @@ export default function WalletDashboard() {
         <CardHeader>
           <CardTitle className="text-2xl font-semibold flex justify-between items-center">
             <span>Welcome back, {profile?.full_name || "User"} 👋</span>
-            <Button variant="outline" className="hover:bg-blue-100">
-              Earn More Credits
+            <Button
+              variant="outline"
+              className="hover:bg-blue-100"
+              onClick={() => window.location.reload()}
+            >
+              Refresh
             </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-500">Current Reward Balance</p>
+              <p className="text-sm text-gray-500">Current Credit Balance</p>
               <h2 className="text-4xl font-bold text-blue-600">
                 £{currentCredits.toFixed(2)}
               </h2>
               <p className="text-sm text-gray-400 mt-1">
-                🎯 {Math.min(100, Math.round(currentCredits))}% towards next goal
+                🎯 {Math.min(100, Math.round(currentCredits))}% towards next reward
               </p>
             </div>
             <div className="w-1/3">
-              <Progress value={Math.min(100, currentCredits)} className="h-3" />
+              <Progress
+                value={Math.min(100, currentCredits)}
+                className="h-3"
+              />
             </div>
           </div>
         </CardContent>

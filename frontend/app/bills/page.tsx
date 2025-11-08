@@ -49,11 +49,12 @@ export default function BillsPage() {
     const bill = bills.find((b) => b.id === billId);
     if (!bill) return alert("Bill not found!");
 
-    // 1️⃣ Update bill status
+    // 1️⃣ Update bill status to "paid"
     const { error: updateError } = await supabase
       .from("bills")
       .update({ status: "paid" })
-      .eq("id", billId);
+      .eq("id", billId)
+      .eq("user_id", user.id);
 
     if (updateError) {
       console.error("Error updating bill:", updateError);
@@ -61,30 +62,59 @@ export default function BillsPage() {
       return;
     }
 
-    // 2️⃣ Insert record into payments table (matching your schema)
+    // 2️⃣ Insert record into payments table
     const { error: paymentError } = await supabase.from("payments").insert([
       {
         user_id: user.id,
         bill_id: bill.id,
         amount_paid: bill.amount,
         status: "success",
+        created_at: new Date(),
       },
     ]);
 
     if (paymentError) {
       console.error("Error inserting payment:", paymentError);
       alert("Bill marked as paid, but payment not logged!");
-    } else {
-      console.log("✅ Payment recorded successfully");
-      alert("✅ Payment successful!");
     }
 
-    // 3️⃣ Update UI instantly
+    // 3️⃣ Add 5% of payment as credits to profile
+    const creditToAdd = bill.amount * 0.05;
+
+    try {
+      // Get current credits
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("credits")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      const newCredits = (profile?.credits || 0) + creditToAdd;
+
+      const { error: updateCreditsError } = await supabase
+        .from("profiles")
+        .update({ credits: newCredits })
+        .eq("id", user.id);
+
+      if (updateCreditsError) throw updateCreditsError;
+
+      alert(
+        `✅ Payment successful! You earned £${creditToAdd.toFixed(
+          2
+        )} in credits 🎉`
+      );
+    } catch (error) {
+      console.error("Error adding credits:", error);
+      alert("Payment succeeded, but failed to add credits.");
+    }
+
+    // 4️⃣ Update UI instantly
     setBills((prev) =>
       prev.map((b) => (b.id === billId ? { ...b, status: "paid" } : b))
     );
   };
-
 
   if (loading)
     return (
