@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
+from services import payments
+from dotenv import load_dotenv
+load_dotenv(".env")
 
 app = FastAPI(title="GUHack2025 API", version="1.0.0")
 
@@ -48,6 +51,8 @@ async def get_item(item_id: int):
 async def create_item(item: Item):
     items.append(item.dict())
     return item
+
+app.include_router(payments.router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
