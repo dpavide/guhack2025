@@ -124,13 +124,8 @@ export default function WalletDashboard() {
         <CardHeader>
           <CardTitle className="text-2xl font-semibold flex justify-between items-center">
             <span>Welcome back, {profile?.full_name || "User"} 👋</span>
-            <Button
-              variant="outline"
-              className="hover:bg-blue-100"
-              onClick={() => window.location.reload()}
-            >
-              Refresh
-            </Button>
+            
+              
           </CardTitle>
         </CardHeader>
         <CardContent>

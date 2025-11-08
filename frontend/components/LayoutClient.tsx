@@ -32,6 +32,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             <Link href="/profile" className="hover:text-indigo-600">
               Profile
             </Link>
+            <Link href="/inbox" className="hover:text-indigo-600">
+              Inbox
+            </Link>
             <button onClick={handleLogout} className="text-red-600 hover:text-red-700">
               Logout
             </button>
