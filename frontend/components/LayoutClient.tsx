@@ -26,12 +26,16 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             <Link href="/bills" className="hover:text-indigo-600">
               Bills
             </Link>
+            <Link href="/friends" className="hover:text-indigo-600">
+              Friends
+            </Link>
             <Link href="/redeem" className="hover:text-indigo-600">
               Redeem
             </Link>
             <Link href="/profile" className="hover:text-indigo-600">
               Profile
             </Link>
+            
             <button onClick={handleLogout} className="text-red-600 hover:text-red-700">
               Logout
             </button>
