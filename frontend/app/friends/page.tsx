@@ -18,6 +18,7 @@ export default function FriendsPage() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
 
+  // Get logged-in user
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
@@ -26,6 +27,7 @@ export default function FriendsPage() {
     getUser();
   }, []);
 
+  // Fetch data when user changes
   useEffect(() => {
     if (!user) return;
     fetchFriends();
@@ -33,6 +35,7 @@ export default function FriendsPage() {
     fetchSentRequests();
   }, [user]);
 
+  // Fetch accepted friends
   const fetchFriends = async () => {
     const { data } = await supabase
       .from("friends")
@@ -42,6 +45,7 @@ export default function FriendsPage() {
     setFriends(data?.map((f) => f.profiles) || []);
   };
 
+  // Fetch received requests
   const fetchPendingRequests = async () => {
     const { data } = await supabase
       .from("friends")
@@ -51,6 +55,7 @@ export default function FriendsPage() {
     setPendingRequests(data || []);
   };
 
+  // Fetch sent requests
   const fetchSentRequests = async () => {
     const { data } = await supabase
       .from("friends")
@@ -60,6 +65,7 @@ export default function FriendsPage() {
     setSentRequests(data || []);
   };
 
+  // Search for users
   const searchUsers = async () => {
     if (!search.trim()) return setResults([]);
     const { data } = await supabase
@@ -70,6 +76,7 @@ export default function FriendsPage() {
     setResults(data || []);
   };
 
+  // Send friend request
   const sendRequest = async (friendId: string) => {
     await supabase.from("friends").insert([
       { user_id: user.id, friend_id: friendId, status: "pending" },
@@ -77,6 +84,7 @@ export default function FriendsPage() {
     fetchSentRequests();
   };
 
+  // Accept friend request
   const acceptRequest = async (id: string, senderId: string) => {
     await supabase.from("friends").update({ status: "accepted" }).eq("id", id);
     await supabase.from("friends").insert([
@@ -86,9 +94,19 @@ export default function FriendsPage() {
     fetchFriends();
   };
 
+  // Decline friend request
   const declineRequest = async (id: string) => {
     await supabase.from("friends").delete().eq("id", id);
     fetchPendingRequests();
+  };
+
+  // Remove friend (both sides)
+  const removeFriend = async (friendId: string) => {
+    await supabase
+      .from("friends")
+      .delete()
+      .or(`and(user_id.eq.${user.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${user.id})`);
+    fetchFriends();
   };
 
   return (
@@ -175,8 +193,18 @@ export default function FriendsPage() {
         <CardContent>
           {friends.length === 0 && <p>No friends yet</p>}
           {friends.map((f) => (
-            <div key={f.id} className="py-2 border-b">
-              {f.username}
+            <div
+              key={f.id}
+              className="flex items-center justify-between py-2 border-b"
+            >
+              <span>{f.username}</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => removeFriend(f.id)}
+              >
+                Remove
+              </Button>
             </div>
           ))}
         </CardContent>
