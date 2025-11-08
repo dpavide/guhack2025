@@ -9,49 +9,81 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
 
 export default function WalletDashboard() {
-  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
-  const [perks, setPerks] = useState<any[]>([]);
+  const [rewards, setRewards] = useState<any>(null);
+  const [redemptions, setRedemptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const { data: authUser } = await supabase.auth.getUser();
-      if (!authUser.user) {
+
+      // 1. Get the authenticated user
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
         window.location.href = "/login";
         return;
       }
 
-      // Fetch user info
-      const { data: userData } = await supabase
-        .from("users")
+      const userId = authData.user.id;
+
+      // 2. Fetch user profile
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
         .select("*")
-        .eq("id", authUser.user.id)
+        .eq("id", userId)
         .single();
 
-      // Fetch payments
-      const { data: paymentData } = await supabase
-        .from("payments")
+      if (profileError) console.error("Profile error:", profileError);
+
+      // 3. Fetch rewards
+      const { data: rewardData, error: rewardError } = await supabase
+        .from("rewards")
         .select("*")
-        .eq("user_id", authUser.user.id)
-        .order("date", { ascending: false });
+        .eq("user_id", userId)
+        .single();
 
-      // Fetch perks
-      const { data: perkData } = await supabase.from("perks").select("*");
+      if (rewardError) console.error("Reward error:", rewardError);
 
-      setUser(userData);
+      // 4. Fetch all payments and related bills
+      const { data: paymentData, error: paymentError } = await supabase
+        .from("payments")
+        .select(`
+          id,
+          amount_paid,
+          status,
+          created_at,
+          bill:bill_id(title, amount, due_date)
+        `)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (paymentError) console.error("Payments error:", paymentError);
+
+      // 5. Fetch redemptions
+      const { data: redemptionData, error: redemptionError } = await supabase
+        .from("redemptions")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (redemptionError) console.error("Redemptions error:", redemptionError);
+
+      setProfile(profileData);
+      setRewards(rewardData);
       setPayments(paymentData || []);
-      setPerks(perkData || []);
+      setRedemptions(redemptionData || []);
       setLoading(false);
     };
 
     fetchData();
   }, []);
 
-  if (loading) {
+  if (loading)
     return <div className="p-10 text-center text-gray-500">Loading dashboard...</div>;
-  }
+
+  const currentCredits = rewards?.total_credits || 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8">
@@ -59,7 +91,7 @@ export default function WalletDashboard() {
       <Card className="mb-8 shadow-lg bg-white/70 backdrop-blur-md border-blue-100">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold flex justify-between items-center">
-            <span>Welcome back, {user?.name || "User"} 👋</span>
+            <span>Welcome back, {profile?.full_name || "User"} 👋</span>
             <Button variant="outline" className="hover:bg-blue-100">
               Earn More Credits
             </Button>
@@ -69,11 +101,16 @@ export default function WalletDashboard() {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-sm text-gray-500">Current Reward Balance</p>
-              <h2 className="text-4xl font-bold text-blue-600">£{user?.credits?.toFixed(2) || 0}</h2>
-              <p className="text-sm text-gray-400 mt-1">🎯 {user?.progress || 0}% towards next goal</p>
+              <h2 className="text-4xl font-bold text-blue-600">
+                £{currentCredits.toFixed(2)}
+              </h2>
+              <p className="text-sm text-gray-400 mt-1">
+                🎯 {/* Example progress: */}
+                {Math.min(100, Math.round(currentCredits))}% towards next goal
+              </p>
             </div>
             <div className="w-1/3">
-              <Progress value={user?.progress || 0} className="h-3" />
+              <Progress value={Math.min(100, currentCredits)} className="h-3" />
             </div>
           </div>
         </CardContent>
@@ -97,27 +134,31 @@ export default function WalletDashboard() {
                 <thead>
                   <tr className="border-b text-sm text-gray-500">
                     <th>Date</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Credits</th>
+                    <th>Bill</th>
+                    <th>Amount Paid</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((p, i) => (
+                  {payments.map((p) => (
                     <motion.tr
                       key={p.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
+                      transition={{ delay: 0.05 }}
                       className="border-b hover:bg-blue-50"
                     >
-                      <td>{new Date(p.date).toLocaleDateString()}</td>
-                      <td>{p.type}</td>
-                      <td>£{p.amount}</td>
-                      <td className="text-green-600">+£{p.credits}</td>
+                      <td>{new Date(p.created_at).toLocaleDateString()}</td>
+                      <td>{p.bill?.title || "Unknown"}</td>
+                      <td>£{p.amount_paid}</td>
                       <td>
-                        <span className="text-green-500 font-medium">✅ {p.status}</span>
+                        <span
+                          className={`font-medium ${
+                            p.status === "success" ? "text-green-500" : "text-red-500"
+                          }`}
+                        >
+                          {p.status}
+                        </span>
                       </td>
                     </motion.tr>
                   ))}
@@ -130,26 +171,20 @@ export default function WalletDashboard() {
         {/* Redeem Credits */}
         <TabsContent value="redeem">
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {perks.map((perk, i) => (
+            {redemptions.map((r) => (
               <motion.div
-                key={perk.id}
+                key={r.id}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.05 }}
+                transition={{ delay: 0.05 }}
               >
                 <Card className="hover:shadow-lg transition-shadow border-blue-100">
                   <CardHeader>
-                    <CardTitle className="text-lg">{perk.title}</CardTitle>
+                    <CardTitle className="text-lg">{r.redemption_type}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-500 mb-2">{perk.description}</p>
-                    <Button
-                      disabled={user.credits < perk.cost}
-                      onClick={() => alert(`Redeemed ${perk.title} for £${perk.cost}`)}
-                      className="w-full"
-                    >
-                      Redeem for £{perk.cost}
-                    </Button>
+                    <p className="text-gray-500 mb-2">{r.description}</p>
+                    <p className="font-semibold">Cost: £{r.amount}</p>
                   </CardContent>
                 </Card>
               </motion.div>

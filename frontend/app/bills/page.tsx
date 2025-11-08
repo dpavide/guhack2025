@@ -45,22 +45,53 @@ export default function BillsPage() {
   }, []);
 
   // Handle paying a specific bill
-  const handlePayment = async (billId: string) => {
-    const { error } = await supabase
+  const handlePayment = async (bill: any) => {
+    if (!user) return;
+
+    // 1. Ensure profile exists
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile) {
+      alert("Profile missing. Cannot pay bill.");
+      return;
+    }
+
+    // 2. Mark the bill as paid
+    const { error: billError } = await supabase
       .from("bills")
       .update({ status: "paid" })
-      .eq("id", billId);
+      .eq("id", bill.id);
 
-    if (error) {
-      console.error("Payment failed:", error);
+    if (billError) {
+      console.error("Payment failed:", billError);
       alert("Payment failed. Try again.");
-    } else {
-      alert("Payment successful!");
-      // Refresh bills
-      setBills((prev) =>
-        prev.map((b) => (b.id === billId ? { ...b, status: "paid" } : b))
-      );
+      return;
     }
+
+    // 3. Insert into payments
+    const { error: paymentError } = await supabase.from("payments").insert([
+      {
+        user_id: user.id,
+        bill_id: bill.id,
+        amount_paid: bill.amount,
+        status: "success",
+      },
+    ]);
+
+    if (paymentError) {
+      console.error("Failed to record payment:", paymentError);
+      alert("Payment was made, but could not record transaction.");
+    }
+
+    // 4. Update local bills state
+    setBills((prev) =>
+      prev.map((b) => (b.id === bill.id ? { ...b, status: "paid" } : b))
+    );
+
   };
 
   if (loading)
@@ -119,7 +150,7 @@ export default function BillsPage() {
                     <Button
                       className="flex-1"
                       size="lg"
-                      onClick={() => handlePayment(bill.id)}
+                      onClick={() => handlePayment(bill)}
                     >
                       Pay now
                     </Button>
