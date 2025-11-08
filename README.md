@@ -33,18 +33,18 @@ cd backend
 
 2. Create and activate a virtual environment:
 ```bash
-python -m venv venv
+python3 -m venv venv  # On Windows: python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 3. Install dependencies:
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 4. Run the backend server:
 ```bash
-python main.py
+python3 main.py
 ```
 
 The API will be available at `http://localhost:8000`
