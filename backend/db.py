@@ -256,16 +256,8 @@ def create_user(username: str, email: str, password_hash: Optional[str] = None) 
     }
     res = sb.table(T_USER).insert(payload).select("*").single().execute()
     
-    # Initialize rewards record for new user
-    # Schema: rewards(id, user_id, total_credits) - NO last_updated field
-    user_id = res.data.get("id")
-    try:
-        sb.table(T_CREDITS).insert({
-            "user_id": user_id,
-            "total_credits": 0
-        }).execute()
-    except Exception:
-        pass  # Rewards record might already exist
+    # Credits are now stored in profiles.credits field (initialized to 0 by default)
+    # No need to create separate rewards record
     
     return _user_to_api(res.data, current_credit=0)
 
@@ -306,17 +298,11 @@ def ensure_user(user_id: str, email: str, username: Optional[str] = None) -> Dic
     if not new_user:
         raise ValueError("Failed to create user")
     
-    # Initialize rewards record for new user
-    # Schema: rewards(id, user_id, total_credits)
-    try:
-        sb.table(T_CREDITS).insert({
-            "user_id": user_id,
-            "total_credits": 0
-        }).execute()
-    except Exception:
-        pass
+    # Credits are now stored in profiles.credits field
+    # Fetch the actual credit value from the database
+    current_credit = _recalc_user_credit(sb, user_id)
     
-    return _user_to_api(new_user, current_credit=0)
+    return _user_to_api(new_user, current_credit=current_credit)
 
 # Admin/maintenance: purge a user's data by email
 def delete_user_by_email(email: str) -> Dict[str, Any]:
@@ -480,13 +466,16 @@ def list_bills(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
 
 def _recalc_user_credit(sb: Client, user_id: str) -> int:
     """
-    Calculate user's current credit balance from the rewards table.
-    The 'rewards' table stores user credit balances (total_credits field).
+    Calculate user's current credit balance from the profiles table.
+    The 'profiles' table stores user credit balances in the 'credits' field.
     """
-    # Fetch the user's rewards record (which stores credit balance)
-    credits = sb.table(T_CREDITS).select("total_credits").eq("user_id", user_id).execute().data or []
-    # Sum all credit records for this user (usually should be just one row)
-    balance = int(sum(int(float(c.get("total_credits", 0) or 0)) for c in credits))
+    # Fetch the user's profile record (which stores credit balance)
+    profile = sb.table(T_USER).select("credits").eq("id", user_id).execute().data or []
+    # Get credits from profile (should be just one row)
+    if profile:
+        balance = int(float(profile[0].get("credits", 0) or 0))
+    else:
+        balance = 0
     return balance
 
 
@@ -529,24 +518,23 @@ def create_payment(bill_id: str, amount_paid: float, payment_method: str,
     # Update bill status to 'paid' (match DB schema: lowercase)
     sb.table(T_BILL).update({"status": "paid"}).eq("id", bill_id).execute()
 
-    # Update user's credit balance in the rewards table
-    # Schema: rewards(id, user_id, total_credits) - NO last_updated field
-    existing_reward = sb.table(T_CREDITS).select("*").eq("user_id", user_id).execute().data
+    # Update user's credit balance in the profiles table
+    # Schema: profiles(id, credits numeric)
+    profile = sb.table(T_USER).select("credits").eq("id", user_id).execute().data
     
-    if existing_reward:
-        # Update existing record
-        current_total = float(existing_reward[0].get("total_credits", 0) or 0)
+    if profile:
+        # Update existing profile credits
+        current_total = float(profile[0].get("credits", 0) or 0)
         new_total = current_total + credit_awarded
-        sb.table(T_CREDITS).update({
-            "total_credits": new_total
-        }).eq("user_id", user_id).execute()
+        sb.table(T_USER).update({
+            "credits": new_total
+        }).eq("id", user_id).execute()
         balance_after = int(new_total)
     else:
-        # Create new rewards record for this user
-        sb.table(T_CREDITS).insert({
-            "user_id": user_id,
-            "total_credits": credit_awarded
-        }).execute()
+        # Profile should exist, but if not, initialize credits
+        sb.table(T_USER).update({
+            "credits": credit_awarded
+        }).eq("id", user_id).execute()
         balance_after = credit_awarded
 
     # Credit log (credit_log.user_id is integer, profiles.id is uuid)
@@ -738,11 +726,11 @@ def redeem_reward(user_id: str, reward_id: str) -> Dict[str, Any]:
     if not red:
         raise ValueError("Failed to create redemption")
 
-    # Update user's credit balance in rewards table
+    # Update user's credit balance in profiles table
     new_balance = balance - cost
-    sb.table(T_CREDITS).update({
-        "total_credits": new_balance
-    }).eq("user_id", user_id).execute()
+    sb.table(T_USER).update({
+        "credits": new_balance
+    }).eq("id", user_id).execute()
 
     # Credit log (-) - handle integer user_id type mismatch
     try:

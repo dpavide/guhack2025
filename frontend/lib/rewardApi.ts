@@ -101,12 +101,19 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 // User APIs
 export async function initUser(userId: string, email: string, username?: string): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/api/reward/users/init`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ UserID: userId, Email: email, UserName: username }),
-  });
-  return handleResponse<User>(response);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/reward/users/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ UserID: userId, Email: email, UserName: username }),
+    });
+    return handleResponse<User>(response);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiError(0, `Cannot connect to backend at ${API_BASE_URL}. Is the server running?`);
+    }
+    throw error;
+  }
 }
 
 export async function ensureUser(userId: string, email: string, username?: string): Promise<User> {
@@ -194,11 +201,18 @@ export async function getPayment(paymentId: string): Promise<Payment> {
 
 // Reward APIs
 export async function listRewards(active?: boolean): Promise<Reward[]> {
-  const url = active !== undefined
-    ? `${API_BASE_URL}/api/reward/rewards?active=${active}`
-    : `${API_BASE_URL}/api/reward/rewards`;
-  const response = await fetch(url);
-  return handleResponse<Reward[]>(response);
+  try {
+    const url = active !== undefined
+      ? `${API_BASE_URL}/api/reward/rewards?active=${active}`
+      : `${API_BASE_URL}/api/reward/rewards`;
+    const response = await fetch(url);
+    return handleResponse<Reward[]>(response);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiError(0, `Cannot connect to backend at ${API_BASE_URL}. Is the server running?`);
+    }
+    throw error;
+  }
 }
 
 export async function getReward(rewardId: string): Promise<Reward> {
@@ -237,8 +251,15 @@ export async function listRedemptions(userId: string): Promise<Redemption[]> {
 
 // Credit Log APIs
 export async function getCreditLogs(userId: string): Promise<CreditLog[]> {
-  const response = await fetch(`${API_BASE_URL}/api/reward/credit_logs/${userId}`);
-  return handleResponse<CreditLog[]>(response);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/reward/credit_logs/${userId}`);
+    return handleResponse<CreditLog[]>(response);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiError(0, `Cannot connect to backend at ${API_BASE_URL}. Is the server running?`);
+    }
+    throw error;
+  }
 }
 
 // Leaderboard APIs
