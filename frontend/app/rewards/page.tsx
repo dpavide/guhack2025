@@ -193,10 +193,8 @@ export default function RewardsPage() {
                             localStorage.setItem("user_goal", JSON.stringify(goal));
                             // dispatch a custom event so dashboard (if open) updates immediately
                             window.dispatchEvent(new CustomEvent("goalChanged", { detail: goal }));
-                            alert(`Goal set locally: ${item.item_name} (${item.credit_cost} credits)`);
                           } catch (err) {
                             console.error("Failed to save goal to localStorage", err);
-                            alert("Failed to set goal locally");
                           }
                         }}
                         disabled={!userId}
