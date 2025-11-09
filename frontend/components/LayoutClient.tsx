@@ -17,7 +17,7 @@ import {
 export default function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isAuthPage = pathname === "/" || pathname === "/login";
+  const isAuthPage = pathname === "/" || pathname === "/login" || pathname === "/signup";
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

@@ -2,8 +2,13 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
+import { AtSign, Mail, Lock, User, Dice5 } from "lucide-react";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -112,7 +117,7 @@ export default function SignupPage() {
   };
 
   // Sign up handler
-  const handleSignup = async () => {
+  const handleSignup = useCallback(async () => {
     setLoading(true);
     try {
       // if username empty, generate one
@@ -166,98 +171,132 @@ export default function SignupPage() {
     } finally {
       setLoading(false);
     }
+  }, [username, email, password, firstName, lastName, router]);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !loading) {
+      handleSignup();
+    }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-gradient-to-br from-green-50 to-teal-100 p-6">
-      <h1 className="text-3xl font-bold mb-2">Create an Account</h1>
+    <div className="relative min-h-[calc(100vh-3rem)] md:min-h-screen flex items-center justify-center py-10 md:py-16">
+      {/* background */}
+      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-indigo-50 via-white to-slate-100" />
+      <div className="absolute -z-10 inset-0 bg-[radial-gradient(800px_400px_at_50%_-20%,rgba(79,70,229,0.08),transparent)]" />
 
-      <div className="w-full max-w-md bg-white rounded-lg shadow p-6 space-y-3">
-        <div className="flex gap-2">
-          <input
-            className="p-2 rounded border w-full"
-            placeholder="First name"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-          />
-          <input
-            className="p-2 rounded border w-full"
-            placeholder="Last name"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-          />
-        </div>
+      <div className="w-full max-w-md px-4">
+        <Card className="shadow-lg border-gray-100/80">
+          <CardHeader>
+            <CardTitle className="text-2xl">Create your account</CardTitle>
+            <CardDescription>Join Splitr and start sharing expenses smarter</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <Label htmlFor="first">First name</Label>
+                <Input
+                  id="first"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Jane"
+                  icon={<User className="h-4 w-4" />}
+                  onKeyDown={onKeyDown}
+                />
+              </div>
+              <div>
+                <Label htmlFor="last">Last name</Label>
+                <Input
+                  id="last"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Doe"
+                  icon={<User className="h-4 w-4" />}
+                  onKeyDown={onKeyDown}
+                />
+              </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center px-3 py-2 border rounded w-full bg-gray-50">
-              <span className="text-gray-500 mr-2">@</span>
-              <input
-                className="flex-1 bg-transparent outline-none"
-                placeholder="choose a username or press the dice"
-                value={username}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setUsername(v.replace(/^@/, ""));
-                  setUsernameAvailable(null);
-                }}
-                onBlur={() => checkUsernameAvailability(username)}
-              />
+              <div>
+                <Label htmlFor="username" hint="3–20 chars: a–z, 0–9, _">
+                  Username
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="username"
+                    value={username}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setUsername(v.replace(/^@/, ""));
+                      setUsernameAvailable(null);
+                    }}
+                    onBlur={() => checkUsernameAvailability(username)}
+                    placeholder="e.g. coolcapybara"
+                    icon={<AtSign className="h-4 w-4" />}
+                    onKeyDown={onKeyDown}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleRandomize}
+                    disabled={usernameChecking}
+                    title="Randomize username"
+                    className="shrink-0"
+                    aria-label="Randomize username"
+                  >
+                    <Dice5 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="mt-2 text-sm min-h-5">
+                  {usernameChecking && <span className="text-gray-500">Checking…</span>}
+                  {usernameAvailable === true && <span className="text-green-600">Username available ✓</span>}
+                  {usernameAvailable === false && <span className="text-red-600">Username not allowed or taken</span>}
+                  {usernameAvailable === null && <span className="text-gray-500">Tip: press the dice for ideas</span>}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  icon={<Mail className="h-4 w-4" />}
+                  onKeyDown={onKeyDown}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  icon={<Lock className="h-4 w-4" />}
+                  onKeyDown={onKeyDown}
+                />
+              </div>
             </div>
-
-            {/* Dice button */}
-            <button
-              type="button"
-              onClick={handleRandomize}
-              disabled={usernameChecking}
-              title="Randomize username"
-              className="inline-flex items-center justify-center px-3 py-2 border rounded hover:bg-gray-100"
+          </CardContent>
+          <CardFooter className="flex flex-col items-stretch gap-3">
+            <Button
+              onClick={handleSignup}
+              disabled={loading || !email || !password}
+              className="w-full bg-indigo-600 text-white hover:bg-indigo-700"
             >
-              {/* simple dice SVG */}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                <rect x="2" y="2" width="20" height="20" rx="3" />
-                <circle cx="8" cy="8" r="1.4" fill="white" />
-                <circle cx="16" cy="8" r="1.4" fill="white" />
-                <circle cx="8" cy="16" r="1.4" fill="white" />
-                <circle cx="16" cy="16" r="1.4" fill="white" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="mt-2 text-sm">
-            {usernameChecking && <span className="text-gray-500">Checking...</span>}
-            {usernameAvailable === true && <span className="text-green-600">Username available ✓</span>}
-            {usernameAvailable === false && <span className="text-red-600">Username not allowed or taken</span>}
-            {usernameAvailable === null && <span className="text-gray-500">3–20 chars, lowercase letters, numbers or underscores</span>}
-          </div>
-        </div>
-
-        <input
-          className="p-2 rounded border w-full"
-          placeholder="Email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          className="p-2 rounded border w-full"
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        <div className="flex justify-end">
-          <Button
-            onClick={handleSignup}
-            disabled={loading}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-60"
-          >
-            {loading ? "Creating..." : "Sign up"}
-          </Button>
-        </div>
+              {loading ? "Creating…" : "Create account"}
+            </Button>
+            <p className="text-sm text-gray-500 text-center">
+              Already have an account? {" "}
+              <Link className="text-indigo-600 hover:underline" href="/login">Sign in</Link>
+            </p>
+          </CardFooter>
+        </Card>
       </div>
     </div>
   );

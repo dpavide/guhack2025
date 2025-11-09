@@ -258,22 +258,31 @@ export default function FriendsPage() {
 
   /** ---------- UI ---------- **/
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-slate-50 py-10"
+    >
+      <div className="mx-auto max-w-6xl px-4 space-y-10">
       {/* 🔍 Search Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Find Friends</CardTitle>
+      <Card className="shadow-sm bg-white/80 backdrop-blur-md border border-indigo-100/60 rounded-xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold tracking-tight text-gray-800 flex items-center gap-2">
+            <span>Find Friends</span>
+            <span className="text-xs font-normal text-gray-400">Search & Add</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 mb-4">
+        <CardContent className="space-y-4">
+          <div className="flex gap-3">
             <input
               type="text"
               placeholder="Search username..."
-              className="border rounded px-3 py-2 w-full"
+              className="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm shadow-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <Button onClick={searchUsers}>Search</Button>
+            <Button onClick={searchUsers} className="rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm">Search</Button>
           </div>
 
           {results.length > 0 &&
@@ -284,24 +293,22 @@ export default function FriendsPage() {
               return (
                 <div
                   key={r.id}
-                  className="flex items-center justify-between py-2 border-b hover:bg-gray-50 transition-all"
+                  className="flex items-center justify-between py-3 border-b last:border-b-0 hover:bg-indigo-50/50 transition-colors rounded-md px-2"
                 >
                   <div className="flex items-center gap-3">
                     {renderAvatar(r)}
                     <div>
-                      <p className="font-medium">{(r.first_name ?? "") + (r.last_name ? ` ${r.last_name}` : "")}</p>
-                      <p className="text-xs text-gray-500">
-                        {"@" + r.username}
-                      </p>
+                      <p className="font-medium text-sm text-gray-800">{(r.first_name ?? "") + (r.last_name ? ` ${r.last_name}` : "")}</p>
+                      <p className="text-xs text-gray-500">{"@" + r.username}</p>
                     </div>
                   </div>
 
                   {alreadyFriend ? (
-                    <span className="text-green-500 text-sm">Friend</span>
+                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">Friend</span>
                   ) : alreadySent ? (
-                    <span className="text-yellow-500 text-sm">Pending</span>
+                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">Pending</span>
                   ) : (
-                    <Button size="sm" onClick={() => sendRequest(r.id)}>
+                    <Button size="sm" onClick={() => sendRequest(r.id)} className="rounded-md bg-green-600 hover:bg-green-700">
                       <UserPlus className="w-4 h-4 mr-1" /> Add
                     </Button>
                   )}
@@ -312,27 +319,27 @@ export default function FriendsPage() {
       </Card>
 
       {/* 🕓 Pending Requests */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pending Friend Requests</CardTitle>
+      <Card className="shadow-sm bg-white/80 backdrop-blur-md border border-indigo-100/60 rounded-xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg font-semibold tracking-tight text-gray-800 flex items-center gap-2">
+            <span>Pending Requests</span>
+            <span className="text-xs font-normal text-gray-400">Approve or Decline</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {pendingRequests.length === 0 ? (
-            <p className="text-gray-500 text-sm">No pending requests</p>
+            <p className="text-sm text-gray-500 py-6 text-center">No pending requests</p>
           ) : (
             pendingRequests.map((req) => (
               <div
                 key={req.id}
-                className="flex items-center justify-between py-2 border-b hover:bg-gray-50"
+                className="flex items-center justify-between py-3 border-b last:border-b-0 hover:bg-indigo-50/50 transition-colors rounded-md px-2"
               >
                 <div className="flex items-center gap-3">
                   {renderAvatar(req.profile)}
                   <div>
-                    <p className="font-medium">{req.profile?.username}</p>
-                    <p className="text-xs text-gray-500">
-                      {(req.profile?.first_name ?? "") +
-                        (req.profile?.last_name ? ` ${req.profile?.last_name}` : "")}
-                    </p>
+                    <p className="font-medium text-sm text-gray-800">{req.profile?.username}</p>
+                    <p className="text-xs text-gray-500">{(req.profile?.first_name ?? "") + (req.profile?.last_name ? ` ${req.profile?.last_name}` : "")}</p>
                   </div>
                 </div>
 
@@ -340,7 +347,7 @@ export default function FriendsPage() {
                   <Button
                     size="sm"
                     onClick={() => acceptRequest(req.id, req.user_id)}
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className="bg-green-600 hover:bg-green-700 text-white rounded-md"
                   >
                     <Check className="w-4 h-4" />
                   </Button>
@@ -348,6 +355,7 @@ export default function FriendsPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => declineRequest(req.id)}
+                    className="rounded-md"
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -359,18 +367,21 @@ export default function FriendsPage() {
       </Card>
 
       {/* 🧑‍🤝‍🧑 Friends List with hover/tap popup */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Friends</CardTitle>
+      <Card className="shadow-sm bg-white/80 backdrop-blur-md border border-indigo-100/60 rounded-xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg font-semibold tracking-tight text-gray-800 flex items-center gap-2">
+            <span>Your Friends</span>
+            <span className="text-xs font-normal text-gray-400">Manage connections</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {friends.length === 0 ? (
-            <p className="text-gray-500 text-sm">You have no friends yet.</p>
+            <p className="text-sm text-gray-500 py-6 text-center">You have no friends yet.</p>
           ) : (
             friends.map((f) => (
               <div
                 key={f.id}
-                className="relative flex items-center justify-between py-2 border-b hover:bg-gray-50 transition-all cursor-pointer"
+                className="relative flex items-center justify-between py-3 border-b last:border-b-0 hover:bg-indigo-50/50 transition-colors cursor-pointer rounded-md px-2"
                 onMouseEnter={() => setActiveFriend(f.id)}
                 onMouseLeave={() => setActiveFriend(null)}
                 onClick={() => setActiveFriend((prev) => (prev === f.id ? null : f.id))}
@@ -378,10 +389,8 @@ export default function FriendsPage() {
                 <div className="flex items-center gap-3">
                   {renderAvatar(f)}
                   <div>
-                    <p className="font-medium">{(f.first_name ?? "") + (f.last_name ? ` ${f.last_name}` : "")}</p>
-                    <p className="text-xs text-gray-500">
-                      {"@" + f.username}
-                    </p>
+                    <p className="font-medium text-sm text-gray-800">{(f.first_name ?? "") + (f.last_name ? ` ${f.last_name}` : "")}</p>
+                    <p className="text-xs text-gray-500">{"@" + f.username}</p>
                   </div>
                 </div>
                 <Button
@@ -391,7 +400,7 @@ export default function FriendsPage() {
                     e.stopPropagation();
                     removeFriend(f.id);
                   }}
-                  className="hover:text-red-600 hover:border-red-600"
+                  className="hover:text-red-600 hover:border-red-600 rounded-md"
                 >
                   <UserMinus className="w-4 h-4 mr-1" /> Remove
                 </Button>
@@ -404,14 +413,14 @@ export default function FriendsPage() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 5 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute left-16 top-1/2 -translate-y-1/2 w-64 bg-white shadow-lg rounded-xl border border-gray-200 p-3 z-50"
+                    className="absolute left-16 top-1/2 -translate-y-1/2 w-64 bg-white/90 backdrop-blur-md shadow-lg rounded-xl border border-indigo-100 p-3 z-50"
                     >
-                    <p className="font-semibold text-gray-800">
+                    <p className="font-semibold text-gray-800 text-sm">
                         {f.first_name} {f.last_name}
                     </p>
-                    <p className="text-sm text-gray-600 italic">{f.bio || "No bio yet"}</p>
+                    <p className="text-xs text-gray-600 italic">{f.bio || "No bio yet"}</p>
                     {f.created_at && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-[10px] text-gray-500 mt-1">
                         Joined {getDaysSinceJoined(f.created_at)} days ago
                         </p>
                     )}
@@ -425,6 +434,7 @@ export default function FriendsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </motion.div>
   );
 }

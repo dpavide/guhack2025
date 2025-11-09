@@ -272,7 +272,7 @@ export default function RewardsPage() {
               <Button
                 variant="outline"
                 onClick={handleViewHistory}
-                className="flex items-center gap-2 border-blue-200 hover:bg-blue-50"
+                className="flex items-center gap-2 border-indigo-200 hover:bg-indigo-50"
               >
                 <History className="w-4 h-4" />
                 View History
@@ -282,10 +282,10 @@ export default function RewardsPage() {
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="bg-white border-2 border-blue-200 rounded-xl px-6 py-4 shadow-md"
+                className="bg-white border-2 border-indigo-200 rounded-xl px-6 py-4 shadow-md"
               >
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-blue-600">{credits.toFixed(0)}</span>
+                  <span className="text-4xl font-bold text-indigo-600">{credits.toFixed(0)}</span>
                   <span className="text-gray-600 font-medium">credits</span>
                 </div>
               </motion.div>
@@ -323,7 +323,7 @@ export default function RewardsPage() {
                   <Card className="group h-full flex flex-col overflow-hidden transition-all duration-200 hover:shadow-xl border-gray-200">
                     {/* Product Image */}
                     <div className={`relative w-full h-48 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden ${
-                      !canAfford ? 'opacity-60' : ''
+                      canAfford ? '' : 'opacity-60'
                     }`}>
                       {itemImage ? (
                         <Image
@@ -375,7 +375,7 @@ export default function RewardsPage() {
                           onClick={() => handleRedeem(item)}
                           className={`w-full ${
                             canAfford
-                              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                               : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                           }`}
                         >
@@ -422,7 +422,7 @@ export default function RewardsPage() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-              <History className="w-6 h-6 text-blue-600" />
+              <History className="w-6 h-6 text-indigo-600" />
               Credit Transaction History
             </DialogTitle>
           </DialogHeader>
