@@ -275,6 +275,32 @@ export default function BillsPage() {
 
       if (paymentError) throw paymentError;
 
+      // 3️⃣ Add 5% of payment as credits to profile
+      const creditToAdd = participant.amount_owed * 0.05;
+
+      try {
+        // Get current credits
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("credits")
+          .eq("id", currentUserId)
+          .single();
+
+        if (profileError) throw profileError;
+
+        const newCredits = (profile?.credits || 0) + creditToAdd;
+
+        const { error: updateCreditsError } = await supabase
+          .from("profiles")
+          .update({ credits: newCredits })
+          .eq("id", currentUserId);
+
+        if (updateCreditsError) throw updateCreditsError;
+      } catch (error) {
+        console.error("Error adding credits:", error);
+        alert("Payment succeeded, but failed to add credits.");
+      }
+
       // Check if all participants have paid
       const { data: allParticipants, error: participantsError } = await supabase
         .from("bill_participants")
@@ -297,7 +323,7 @@ export default function BillsPage() {
       // Refresh bills
       await fetchBills(currentUserId);
       
-      alert(`✅ Payment successful! You paid £${Number(participant.amount_owed).toFixed(2)}`);
+      alert(`✅ Payment successful! You paid £${Number(participant.amount_owed).toFixed(2)} and earned £${creditToAdd.toFixed(2)} in credits 🎉`);
     } catch (error) {
       console.error("Error processing payment:", error);
       alert("Failed to process payment. Please try again.");
