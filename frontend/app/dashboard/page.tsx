@@ -70,6 +70,8 @@ export default function WalletDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  
+
   // Read front-end only goal from localStorage and listen for changes.
   // We only use the stored goal if it matches the current profile user id (or if profile is not loaded yet we still allow it).
   useEffect(() => {
@@ -114,8 +116,13 @@ export default function WalletDashboard() {
         <CardHeader>
           <CardTitle className="text-2xl font-semibold flex justify-between items-center">
             <span>Welcome back, {profile?.full_name || "User"} 👋</span>
-            
-              
+            <Button
+              variant="outline"
+              className="hover:bg-blue-100"
+              onClick={() => window.location.reload()}
+            >
+              Refresh
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>

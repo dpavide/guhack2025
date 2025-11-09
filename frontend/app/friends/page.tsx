@@ -81,7 +81,14 @@ export default function FriendsPage() {
       .eq("status", "pending");
 
     if (error) return console.error(error);
-    if (!data?.length) return setPendingRequests([]);
+    if (!data?.length) {
+      setPendingRequests([]);
+
+      // clear localStorage for friendRequests
+      localStorage.setItem('friendRequests', JSON.stringify([]));
+      window.dispatchEvent(new CustomEvent('friendRequestsUpdated', { detail: [] }));
+      return;
+    }
 
     const senderIds = data.map((r: any) => r.user_id);
     const { data: senders } = await supabase
@@ -94,6 +101,21 @@ export default function FriendsPage() {
       profile: senders?.find((s) => s.id === r.user_id),
     }));
     setPendingRequests(merged);
+
+    // Sync pending friend requests to localStorage so Inbox can pick them up
+    try {
+      const friendRequests = merged.map((req: any) => ({
+        id: req.id,
+        senderId: req.user_id,
+        senderName: req.profile?.username || req.user_id,
+        timestamp: req.created_at || new Date().toISOString(),
+      }));
+
+      localStorage.setItem('friendRequests', JSON.stringify(friendRequests));
+      window.dispatchEvent(new CustomEvent('friendRequestsUpdated', { detail: friendRequests }));
+    } catch (err) {
+      console.error('Failed to sync friendRequests to localStorage', err);
+    }
   };
 
   /** ---------- Fetch sent requests ---------- **/

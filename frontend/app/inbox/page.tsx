@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -20,17 +21,67 @@ export default function InboxPage() {
 
   // Load friend requests from localStorage
   useEffect(() => {
-    const loadFriendRequests = () => {
+    const loadFriendRequests = async () => {
+      // Prefer live data from Supabase if user is logged in
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user ?? null;
+        if (user) {
+          const { data, error } = await supabase
+            .from('friends')
+            .select('id, user_id, created_at')
+            .eq('friend_id', user.id)
+            .eq('status', 'pending');
+
+          if (!error && data) {
+            // Fetch sender profiles
+            const senderIds = data.map((r: any) => r.user_id);
+            const { data: senders } = await supabase
+              .from('profiles')
+              .select('id, username')
+              .in('id', senderIds);
+
+            const requests = data.map((r: any) => ({
+              id: r.id,
+              senderId: r.user_id,
+              senderName: senders?.find((s: any) => s.id === r.user_id)?.username || r.user_id,
+              timestamp: r.created_at || new Date().toISOString(),
+            }));
+
+            const notificationsList = requests.map((request: any) => ({
+              id: request.id,
+              type: 'FRIEND_REQUEST' as const,
+              title: 'Friend Request',
+              description: `${request.senderName} wants to be your friend`,
+              status: 'unread' as const,
+              timestamp: request.timestamp,
+              senderId: request.senderId,
+              senderName: request.senderName,
+            }));
+
+            setNotifications(notificationsList);
+
+            // also persist to localStorage so other tabs/components can read
+            localStorage.setItem('friendRequests', JSON.stringify(requests));
+            window.dispatchEvent(new CustomEvent('friendRequestsUpdated', { detail: requests }));
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error loading friend requests from supabase', err);
+      }
+
+      // Fallback to localStorage if supabase not available or user not logged in
       const storedRequests = localStorage.getItem('friendRequests');
       if (storedRequests) {
         try {
           const requests = JSON.parse(storedRequests);
           const notificationsList = requests.map((request: any) => ({
             id: request.id,
-            type: 'FRIEND_REQUEST',
+            type: 'FRIEND_REQUEST' as const,
             title: 'Friend Request',
             description: `${request.senderName} wants to be your friend`,
-            status: 'unread',
+            status: 'unread' as const,
             timestamp: request.timestamp || new Date().toISOString(),
             senderId: request.senderId,
             senderName: request.senderName
@@ -44,17 +95,22 @@ export default function InboxPage() {
 
     loadFriendRequests();
 
-    // Listen for changes in friend requests
+    // Poll for updates periodically while inbox is open (helps when other user sends request)
+    const interval = setInterval(() => {
+      loadFriendRequests();
+    }, 15000);
+
+    // Listen for changes in friend requests via localStorage or custom event
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'friendRequests') {
         loadFriendRequests();
       }
     };
 
-    const handleFriendRequestsUpdate = (e: CustomEvent) => {
-      const requests = e.detail;
+    const handleFriendRequestsUpdate = (e: any) => {
+      const requests = e?.detail;
       if (Array.isArray(requests)) {
-        const notificationsList = requests.map(request => ({
+        const notificationsList = requests.map((request: any) => ({
           id: request.id,
           type: 'FRIEND_REQUEST' as const,
           title: 'Friend Request',
@@ -70,8 +126,9 @@ export default function InboxPage() {
 
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('friendRequestsUpdated', handleFriendRequestsUpdate as EventListener);
-    
+
     return () => {
+      clearInterval(interval);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('friendRequestsUpdated', handleFriendRequestsUpdate as EventListener);
     };
