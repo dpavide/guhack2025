@@ -240,121 +240,119 @@ export default function BillsPage() {
   };
 
   const handlePayClick = async (e: React.MouseEvent, billId: string) => {
-    e.stopPropagation();
-    if (!currentUserId) return;
+      e.stopPropagation();
+      if (!currentUserId) return;
 
-    try {
-      // Find the participant record for current user
-      const bill = bills.find(b => b.id === billId);
-      const participant = bill?.bill_participants?.find(p => p.user_id === currentUserId);
-      
-      if (!participant) {
-        alert("Error: Participant record not found");
-        return;
-      }
-
-      // Update participant payment status
-      const { error: updateError } = await supabase
-        .from("bill_participants")
-        .update({
-          has_paid: true,
-          paid_at: new Date().toISOString()
-        })
-        .eq("id", participant.id);
-
-      if (updateError) throw updateError;
-
-      // Create payment record
-      const { error: paymentError } = await supabase
-        .from("payments")
-        .insert({
-          user_id: currentUserId,
-          bill_id: billId,
-          amount_paid: participant.amount_owed,
-          status: "success"
-        });
-
-      if (paymentError) throw paymentError;
-
-      // 3️⃣ Add 5% of payment as credits to profile
-      const creditToAdd = participant.amount_owed * 0.05;
+      // We must declare creditToAdd outside the nested try block 
+      // to use it in the final alert.
+      let creditToAdd = 0; 
+      let participant: any = null; // Declare participant outside try/catch
 
       try {
-        // Get current credits
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("credits")
-          .eq("id", currentUserId)
-          .single();
-
-        if (profileError) throw profileError;
-
-        const newCredits = (profile?.credits || 0) + creditToAdd;
-
-        // Log to credit_log first
-        const { data: paymentData } = await supabase
-          .from("payments")
-          .select("id")
-          .eq("user_id", currentUserId)
-          .eq("bill_id", billId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
-
-        const { error: logError } = await supabase.from("credit_log").insert([
-          {
-            user_id: currentUserId,
-            source_type: "payment",
-            source_id: paymentData?.id || null,
-            change_amount: creditToAdd,
-            balance_after: newCredits,
-          },
-        ]);
-
-        if (logError) {
-          console.error("Error logging credit transaction:", logError);
+        // Find the participant record for current user
+        const bill = bills.find(b => b.id === billId);
+        participant = bill?.bill_participants?.find(p => p.user_id === currentUserId);
+        
+        if (!participant) {
+          alert("Error: Participant record not found");
+          return;
         }
 
-        // Update profile credits
-        const { error: updateCreditsError } = await supabase
-          .from("profiles")
-          .update({ credits: newCredits })
-          .eq("id", currentUserId);
+        // Update participant payment status
+        const { error: updateError } = await supabase
+          .from("bill_participants")
+          .update({
+            has_paid: true,
+            paid_at: new Date().toISOString()
+          })
+          .eq("id", participant.id);
 
-        if (updateCreditsError) throw updateCreditsError;
+        if (updateError) throw updateError;
+
+        // Create payment record (This should be the first DB operation to use the ID later)
+        // We need to use .select("id").single() here to get the payment ID immediately.
+        const { data: insertedPayment, error: paymentError } = await supabase
+          .from("payments")
+          .insert({
+            user_id: currentUserId,
+            bill_id: billId,
+            amount_paid: participant.amount_owed,
+            status: "success"
+          })
+          .select("id")
+          .single(); // Use the inserted ID directly
+
+        if (paymentError) throw paymentError;
+        
+        const paymentId = insertedPayment.id;
+        
+        // 3️⃣ Add 5% of payment as credits to profile
+        creditToAdd = participant.amount_owed * 0.05; // Set the amount here
+
+        try {
+          // Get current credits
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("credits")
+            .eq("id", currentUserId)
+            .single();
+
+          if (profileError) throw profileError;
+
+          const newCredits = (profile?.credits || 0) + creditToAdd;
+
+          // Log to credit_log first (using the insertedPayment ID)
+          const { error: logError } = await supabase.from("credit_log").insert([
+            {
+              user_id: currentUserId,
+              source_type: "payment",
+              source_id: paymentId, // 🔑 Use the directly inserted ID
+              change_amount: creditToAdd,
+              balance_after: newCredits,
+            },
+          ]);
+
+          if (logError) {
+            console.error("Error logging credit transaction:", logError);
+          }
+
+          // Update profile credits
+          const { error: updateCreditsError } = await supabase
+            .from("profiles")
+            .update({ credits: newCredits })
+            .eq("id", currentUserId);
+
+          if (updateCreditsError) throw updateCreditsError;
+        } catch (error) {
+          console.error("Error adding credits:", error);
+          alert("Payment succeeded, but failed to add credits.");
+        }
+
+        // Check if all participants have paid
+        const { data: allParticipants, error: participantsError } = await supabase
+          .from("bill_participants")
+          .select("has_paid")
+          .eq("bill_id", billId);
+
+        if (participantsError) throw participantsError;
+
+        // If all participants have paid, update bill status to 'paid'
+        const allPaid = allParticipants?.every(p => p.has_paid) || false;
+        if (allPaid) {
+          const { error: billUpdateError } = await supabase
+            .from("bills")
+            .update({ status: "paid" })
+            .eq("id", billId);
+
+          if (billUpdateError) throw billUpdateError;
+        }
+
+        await fetchBills(currentUserId);
       } catch (error) {
-        console.error("Error adding credits:", error);
-        alert("Payment succeeded, but failed to add credits.");
+        console.error("Error processing payment:", error);
+        alert("Failed to process payment. Please try again.");
       }
-
-      // Check if all participants have paid
-      const { data: allParticipants, error: participantsError } = await supabase
-        .from("bill_participants")
-        .select("has_paid")
-        .eq("bill_id", billId);
-
-      if (participantsError) throw participantsError;
-
-      // If all participants have paid, update bill status to 'paid'
-      const allPaid = allParticipants?.every(p => p.has_paid) || false;
-      if (allPaid) {
-        const { error: billUpdateError } = await supabase
-          .from("bills")
-          .update({ status: "paid" })
-          .eq("id", billId);
-
-        if (billUpdateError) throw billUpdateError;
-      }
-
-      // Refresh bills
-      await fetchBills(currentUserId);
-      
-      alert(`✅ Payment successful! You paid £${Number(participant.amount_owed).toFixed(2)} and earned £${creditToAdd.toFixed(2)} in credits 🎉`);
-    } catch (error) {
-      console.error("Error processing payment:", error);
-      alert("Failed to process payment. Please try again.");
-    }
-  };
+    };
 
   const handleDetailsClick = (bill: Bill) => {
     setSelectedBill(bill);
