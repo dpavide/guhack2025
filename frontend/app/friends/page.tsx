@@ -6,6 +6,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { Check, X, UserMinus, UserPlus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import dayjs from "dayjs";
 
 type Profile = {
   id: string;
@@ -27,6 +29,7 @@ export default function FriendsPage() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeFriend, setActiveFriend] = useState<string | null>(null);
 
   /** ---------- Load user ---------- **/
   useEffect(() => {
@@ -65,7 +68,7 @@ export default function FriendsPage() {
 
     const { data: profiles, error: profileError } = await supabase
       .from("profiles")
-      .select("id, username, first_name, last_name, avatar_url")
+      .select("id, username, first_name, last_name, avatar_url, bio, created_at")
       .in("id", ids);
 
     if (profileError) return console.error(profileError);
@@ -83,10 +86,8 @@ export default function FriendsPage() {
     if (error) return console.error(error);
     if (!data?.length) {
       setPendingRequests([]);
-
-      // clear localStorage for friendRequests
-      localStorage.setItem('friendRequests', JSON.stringify([]));
-      window.dispatchEvent(new CustomEvent('friendRequestsUpdated', { detail: [] }));
+      localStorage.setItem("friendRequests", JSON.stringify([]));
+      window.dispatchEvent(new CustomEvent("friendRequestsUpdated", { detail: [] }));
       return;
     }
 
@@ -102,7 +103,6 @@ export default function FriendsPage() {
     }));
     setPendingRequests(merged);
 
-    // Sync pending friend requests to localStorage so Inbox can pick them up
     try {
       const friendRequests = merged.map((req: any) => ({
         id: req.id,
@@ -111,10 +111,10 @@ export default function FriendsPage() {
         timestamp: req.created_at || new Date().toISOString(),
       }));
 
-      localStorage.setItem('friendRequests', JSON.stringify(friendRequests));
-      window.dispatchEvent(new CustomEvent('friendRequestsUpdated', { detail: friendRequests }));
+      localStorage.setItem("friendRequests", JSON.stringify(friendRequests));
+      window.dispatchEvent(new CustomEvent("friendRequestsUpdated", { detail: friendRequests }));
     } catch (err) {
-      console.error('Failed to sync friendRequests to localStorage', err);
+      console.error("Failed to sync friendRequests to localStorage", err);
     }
   };
 
@@ -158,34 +158,30 @@ export default function FriendsPage() {
     alert("Friend request sent!");
   };
 
-    const acceptRequest = async (id: string, senderId: string) => {
+  const acceptRequest = async (id: string, senderId: string) => {
     try {
-        // Update existing request
-        const { error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from("friends")
         .update({ status: "accepted" })
         .eq("id", id);
-        if (updateError) throw updateError;
+      if (updateError) throw updateError;
 
-        // Insert reciprocal record
-        const { error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from("friends")
         .insert([{ user_id: user.id, friend_id: senderId, status: "accepted" }]);
-        if (insertError) throw insertError;
+      if (insertError) throw insertError;
 
-        // Update localStorage
-        const storedRequests = JSON.parse(localStorage.getItem('friendRequests') || '[]');
-        const updatedRequests = storedRequests.filter((req: any) => req.id !== id);
-        localStorage.setItem('friendRequests', JSON.stringify(updatedRequests));
-        window.dispatchEvent(new CustomEvent('friendRequestsUpdated', { detail: updatedRequests }));
+      const storedRequests = JSON.parse(localStorage.getItem("friendRequests") || "[]");
+      const updatedRequests = storedRequests.filter((req: any) => req.id !== id);
+      localStorage.setItem("friendRequests", JSON.stringify(updatedRequests));
+      window.dispatchEvent(new CustomEvent("friendRequestsUpdated", { detail: updatedRequests }));
 
-        await fetchPendingRequests();
-        await fetchFriends();
+      await fetchPendingRequests();
+      await fetchFriends();
     } catch (err) {
-        console.error("Error accepting friend request:", err);
+      console.error("Error accepting friend request:", err);
     }
-    };
-
+  };
 
   const declineRequest = async (id: string) => {
     await supabase.from("friends").delete().eq("id", id);
@@ -200,6 +196,13 @@ export default function FriendsPage() {
         `and(user_id.eq.${user.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${user.id})`
       );
     await fetchFriends();
+  };
+
+  /** ---------- Helpers ---------- **/
+  const getDaysSinceJoined = (date?: string | null) => {
+    if (!date) return null;
+    const diff = dayjs().diff(dayjs(date), "day");
+    return diff;
   };
 
   /** ---------- Render Avatar ---------- **/
@@ -218,9 +221,7 @@ export default function FriendsPage() {
       );
     }
 
-    const letter =
-      (profile?.first_name || profile?.username || "?")[0]?.toUpperCase() || "?";
-
+    const letter = (profile?.first_name || profile?.username || "?")[0]?.toUpperCase() || "?";
     return (
       <div className="w-16 h-16 flex items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-slate-700 to-slate-900 text-white text-3xl font-bold shadow-lg flex-shrink-0">
         {letter}
@@ -338,7 +339,7 @@ export default function FriendsPage() {
         </CardContent>
       </Card>
 
-      {/* 🧑‍🤝‍🧑 Friends List */}
+      {/* 🧑‍🤝‍🧑 Friends List with hover/tap popup */}
       <Card>
         <CardHeader>
           <CardTitle>Your Friends</CardTitle>
@@ -350,7 +351,10 @@ export default function FriendsPage() {
             friends.map((f) => (
               <div
                 key={f.id}
-                className="flex items-center justify-between py-2 border-b hover:bg-gray-50"
+                className="relative flex items-center justify-between py-2 border-b hover:bg-gray-50 transition-all cursor-pointer"
+                onMouseEnter={() => setActiveFriend(f.id)}
+                onMouseLeave={() => setActiveFriend(null)}
+                onClick={() => setActiveFriend((prev) => (prev === f.id ? null : f.id))}
               >
                 <div className="flex items-center gap-3">
                   {renderAvatar(f)}
@@ -364,11 +368,39 @@ export default function FriendsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => removeFriend(f.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeFriend(f.id);
+                  }}
                   className="hover:text-red-600 hover:border-red-600"
                 >
                   <UserMinus className="w-4 h-4 mr-1" /> Remove
                 </Button>
+
+                {/* 🪄 Friend Info Popup (next to user avatar) */}
+                <AnimatePresence>
+                {activeFriend === f.id && (
+                    <motion.div
+                    initial={{ opacity: 0, x: 5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 5 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-16 top-1/2 -translate-y-1/2 w-64 bg-white shadow-lg rounded-xl border border-gray-200 p-3 z-50"
+                    >
+                    <p className="font-semibold text-gray-800">
+                        {f.first_name} {f.last_name}
+                    </p>
+                    <p className="text-sm text-gray-600 italic">{f.bio || "No bio yet"}</p>
+                    {f.created_at && (
+                        <p className="text-xs text-gray-500 mt-1">
+                        Joined {getDaysSinceJoined(f.created_at)} days ago
+                        </p>
+                    )}
+                    </motion.div>
+                )}
+                </AnimatePresence>
+
+
               </div>
             ))
           )}
