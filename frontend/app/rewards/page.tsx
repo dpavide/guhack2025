@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card"; // Adjusted: removed duplicate CardHeader, CardTitle
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Image from "next/image";
@@ -143,6 +143,36 @@ export default function RewardsPage() {
     setCredits(newCredits);
     alert(`✅ Successfully redeemed ${item.item_name}!`);
   };
+  
+  // Function to handle setting/deselecting the goal
+  const handleSetGoal = (item: any, isCurrentGoal: boolean) => {
+    if (!userId) {
+      alert("Please sign in to set a goal");
+      return;
+    }
+
+    try {
+      if (isCurrentGoal) {
+        // Deselect the goal
+        localStorage.removeItem("user_goal");
+        window.dispatchEvent(new CustomEvent("goalChanged", { detail: null }));
+        setCurrentGoal(null);
+      } else {
+        // Set a new goal
+        const goal = {
+          shop_item_id: item.shop_item_id,
+          item_name: item.item_name,
+          credit_goal: item.credit_cost,
+          user_id: userId,
+        };
+        localStorage.setItem("user_goal", JSON.stringify(goal));
+        window.dispatchEvent(new CustomEvent("goalChanged", { detail: goal }));
+        setCurrentGoal(goal);
+      }
+    } catch (err) {
+      console.error("Failed to update goal in localStorage", err);
+    }
+  };
 
   if (loading)
     return (
@@ -279,27 +309,7 @@ export default function RewardsPage() {
                               ? 'bg-green-600 hover:bg-green-700 text-white' 
                               : 'hover:bg-gray-50'
                           }`}
-                          onClick={() => {
-                            if (!userId) {
-                              alert("Please sign in to set a goal");
-                              return;
-                            }
-
-                            const goal = {
-                              shop_item_id: item.shop_item_id,
-                              item_name: item.item_name,
-                              credit_goal: item.credit_cost,
-                              user_id: userId,
-                            };
-
-                            try {
-                              localStorage.setItem("user_goal", JSON.stringify(goal));
-                              window.dispatchEvent(new CustomEvent("goalChanged", { detail: goal }));
-                              setCurrentGoal(goal);
-                            } catch (err) {
-                              console.error("Failed to save goal to localStorage", err);
-                            }
-                          }}
+                          onClick={() => handleSetGoal(item, isCurrentGoal)}
                           disabled={!userId}
                         >
                           {isCurrentGoal ? '⭐ Current Goal' : '🎯 Set as Goal'}
