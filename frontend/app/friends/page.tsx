@@ -28,7 +28,7 @@ export default function FriendsPage() {
   const [results, setResults] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load user
+  /** ---------- Load user ---------- **/
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
@@ -37,7 +37,7 @@ export default function FriendsPage() {
     getUser();
   }, []);
 
-  // Load data when user is ready
+  /** ---------- Load data when user is ready ---------- **/
   useEffect(() => {
     if (!user) return;
     setLoading(true);
@@ -46,28 +46,33 @@ export default function FriendsPage() {
     );
   }, [user]);
 
-  /** ---------- Helper Functions ---------- **/
-
+  /** ---------- Fetch Friends (bidirectional) ---------- **/
   const fetchFriends = async () => {
     const { data, error } = await supabase
       .from("friends")
-      .select("friend_id")
-      .eq("user_id", user.id)
+      .select("user_id, friend_id")
+      .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
       .eq("status", "accepted");
 
     if (error) return console.error(error);
 
-    const ids = data?.map((f: any) => f.friend_id) ?? [];
+    const ids =
+      data
+        ?.map((f: any) => (f.user_id === user.id ? f.friend_id : f.user_id))
+        ?.filter((id: string) => id !== user.id) ?? [];
+
     if (ids.length === 0) return setFriends([]);
 
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profileError } = await supabase
       .from("profiles")
       .select("id, username, first_name, last_name, avatar_url")
       .in("id", ids);
 
+    if (profileError) return console.error(profileError);
     setFriends(profiles ?? []);
   };
 
+  /** ---------- Fetch pending requests ---------- **/
   const fetchPendingRequests = async () => {
     const { data, error } = await supabase
       .from("friends")
@@ -76,7 +81,6 @@ export default function FriendsPage() {
       .eq("status", "pending");
 
     if (error) return console.error(error);
-
     if (!data?.length) return setPendingRequests([]);
 
     const senderIds = data.map((r: any) => r.user_id);
@@ -92,6 +96,7 @@ export default function FriendsPage() {
     setPendingRequests(merged);
   };
 
+  /** ---------- Fetch sent requests ---------- **/
   const fetchSentRequests = async () => {
     const { data, error } = await supabase
       .from("friends")
@@ -100,7 +105,6 @@ export default function FriendsPage() {
       .eq("status", "pending");
 
     if (error) return console.error(error);
-
     if (!data?.length) return setSentRequests([]);
 
     const targetIds = data.map((r: any) => r.friend_id);
@@ -112,6 +116,7 @@ export default function FriendsPage() {
     setSentRequests(targets ?? []);
   };
 
+  /** ---------- Search users ---------- **/
   const searchUsers = async () => {
     if (!search.trim()) return setResults([]);
     const { data, error } = await supabase
@@ -124,21 +129,41 @@ export default function FriendsPage() {
     setResults(data ?? []);
   };
 
+  /** ---------- Friend Actions ---------- **/
   const sendRequest = async (friendId: string) => {
     await supabase.from("friends").insert([{ user_id: user.id, friend_id: friendId, status: "pending" }]);
     await fetchSentRequests();
     alert("Friend request sent!");
   };
 
-  const acceptRequest = async (id: string, senderId: string) => {
-    await supabase.from("friends").update({ status: "accepted" }).eq("id", id);
-    await supabase
-      .from("friends")
-      .insert([{ user_id: user.id, friend_id: senderId, status: "accepted" }])
-      .catch(() => {});
-    await fetchPendingRequests();
-    await fetchFriends();
-  };
+    const acceptRequest = async (id: string, senderId: string) => {
+    try {
+        // Update existing request
+        const { error: updateError } = await supabase
+        .from("friends")
+        .update({ status: "accepted" })
+        .eq("id", id);
+        if (updateError) throw updateError;
+
+        // Insert reciprocal record
+        const { error: insertError } = await supabase
+        .from("friends")
+        .insert([{ user_id: user.id, friend_id: senderId, status: "accepted" }]);
+        if (insertError) throw insertError;
+
+        // Update localStorage
+        const storedRequests = JSON.parse(localStorage.getItem('friendRequests') || '[]');
+        const updatedRequests = storedRequests.filter((req: any) => req.id !== id);
+        localStorage.setItem('friendRequests', JSON.stringify(updatedRequests));
+        window.dispatchEvent(new CustomEvent('friendRequestsUpdated', { detail: updatedRequests }));
+
+        await fetchPendingRequests();
+        await fetchFriends();
+    } catch (err) {
+        console.error("Error accepting friend request:", err);
+    }
+    };
+
 
   const declineRequest = async (id: string) => {
     await supabase.from("friends").delete().eq("id", id);
@@ -155,31 +180,33 @@ export default function FriendsPage() {
     await fetchFriends();
   };
 
-    const renderAvatar = (profile?: Profile | null) => {
+  /** ---------- Render Avatar ---------- **/
+  const renderAvatar = (profile?: Profile | null) => {
     if (profile?.avatar_url) {
-        return (
-        <div className="w-14 h-14 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-lg flex-shrink-0">
-            <Image
+      return (
+        <div className="w-16 h-16 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-lg flex-shrink-0">
+          <Image
             src={profile.avatar_url}
             alt={profile.username || "avatar"}
-            width={112}
-            height={112}
+            width={128}
+            height={128}
             className="object-cover w-full h-full rounded-full"
-            />
+          />
         </div>
-        );
+      );
     }
 
     const letter =
-        (profile?.first_name || profile?.username || "?")[0]?.toUpperCase() || "?";
+      (profile?.first_name || profile?.username || "?")[0]?.toUpperCase() || "?";
 
     return (
-        <div className="w-14 h-14 flex items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-slate-700 to-slate-900 text-white text-3xl font-bold shadow-lg flex-shrink-0">
+      <div className="w-16 h-16 flex items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-slate-700 to-slate-900 text-white text-3xl font-bold shadow-lg flex-shrink-0">
         {letter}
-        </div>
+      </div>
     );
-    };
+  };
 
+  /** ---------- Loading State ---------- **/
   if (loading)
     return (
       <div className="flex justify-center items-center min-h-screen text-gray-600">
@@ -188,7 +215,6 @@ export default function FriendsPage() {
     );
 
   /** ---------- UI ---------- **/
-
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       {/* 🔍 Search Section */}
@@ -219,7 +245,7 @@ export default function FriendsPage() {
                   className="flex items-center justify-between py-2 border-b hover:bg-gray-50 transition-all"
                 >
                   <div className="flex items-center gap-3">
-                    {renderAvatar(r, 8)}
+                    {renderAvatar(r)}
                     <div>
                       <p className="font-medium">{r.username}</p>
                       <p className="text-xs text-gray-500">
@@ -258,7 +284,7 @@ export default function FriendsPage() {
                 className="flex items-center justify-between py-2 border-b hover:bg-gray-50"
               >
                 <div className="flex items-center gap-3">
-                  {renderAvatar(req.profile, 8)}
+                  {renderAvatar(req.profile)}
                   <div>
                     <p className="font-medium">{req.profile?.username}</p>
                     <p className="text-xs text-gray-500">
@@ -305,7 +331,7 @@ export default function FriendsPage() {
                 className="flex items-center justify-between py-2 border-b hover:bg-gray-50"
               >
                 <div className="flex items-center gap-3">
-                  {renderAvatar(f, 10)}
+                  {renderAvatar(f)}
                   <div>
                     <p className="font-medium">{f.username}</p>
                     <p className="text-xs text-gray-500">
