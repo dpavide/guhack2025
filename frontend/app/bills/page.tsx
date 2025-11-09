@@ -73,6 +73,9 @@ export default function BillsPage() {
     receiverName: "",
   });
   
+  // Creator's share amount
+  const [creatorShare, setCreatorShare] = useState("");
+  
   // Split participants with custom amounts
   const [splitParticipants, setSplitParticipants] = useState<Array<{
     userId: string;
@@ -353,6 +356,11 @@ export default function BillsPage() {
       return;
     }
 
+    if (!creatorShare) {
+      alert("⚠️ Please enter your share amount");
+      return;
+    }
+
     if (splitParticipants.length === 0) {
       alert("⚠️ Please add at least one participant to split the bill");
       return;
@@ -364,10 +372,17 @@ export default function BillsPage() {
       return;
     }
 
-    const totalAssigned = splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    const creatorAmount = parseFloat(creatorShare);
+    if (isNaN(creatorAmount) || creatorAmount <= 0) {
+      alert("⚠️ Please enter a valid amount for your share");
+      return;
+    }
+
+    const othersTotal = splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    const totalAssigned = creatorAmount + othersTotal;
     
     if (Math.abs(totalAssigned - billTotal) > 0.01) {
-      alert(`⚠️ Total assigned (£${totalAssigned.toFixed(2)}) must equal bill amount (£${billTotal.toFixed(2)})`);
+      alert(`⚠️ Total assigned (£${totalAssigned.toFixed(2)}) must equal bill amount (£${billTotal.toFixed(2)})\nYour share: £${creatorAmount.toFixed(2)}\nOthers: £${othersTotal.toFixed(2)}`);
       return;
     }
 
@@ -406,13 +421,24 @@ export default function BillsPage() {
         return;
       }
 
-      // Create participant records
-      const participantRecords = splitParticipants.map(p => ({
-        bill_id: billData.id,
-        user_id: p.userId,
-        amount_owed: parseFloat(p.amount),
-        has_paid: false
-      }));
+      // Create participant records including the creator
+      const participantRecords = [
+        // Creator as participant (automatically paid)
+        {
+          bill_id: billData.id,
+          user_id: currentUserId,
+          amount_owed: creatorAmount,
+          has_paid: true,
+          paid_at: new Date().toISOString()
+        },
+        // Other participants
+        ...splitParticipants.map(p => ({
+          bill_id: billData.id,
+          user_id: p.userId,
+          amount_owed: parseFloat(p.amount),
+          has_paid: false
+        }))
+      ];
 
       const { error: participantsError } = await supabase
         .from("bill_participants")
@@ -422,6 +448,21 @@ export default function BillsPage() {
         console.error("Participants creation error:", participantsError);
         alert(`Failed to add participants: ${participantsError.message}`);
         return;
+      }
+
+      // Create payment record for the creator
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .insert({
+          user_id: currentUserId,
+          bill_id: billData.id,
+          amount_paid: creatorAmount,
+          status: "success"
+        });
+
+      if (paymentError) {
+        console.error("Payment creation error:", paymentError);
+        // Don't return here, payment record is optional
       }
 
       // Refresh bills
@@ -436,10 +477,11 @@ export default function BillsPage() {
         receiverBank: "",
         receiverName: "",
       });
+      setCreatorShare("");
       setSplitParticipants([]);
       setIsCreateDialogOpen(false);
       
-      alert(`✅ Bill "${newBill.name}" created successfully!\n${splitParticipants.length} participants added.`);
+      alert(`✅ Bill "${newBill.name}" created successfully!\nYour share: £${creatorAmount.toFixed(2)} (paid)\nOther participants: ${splitParticipants.length}`);
     } catch (error) {
       console.error("Error creating bill:", error);
       alert(`Failed to create bill. Please try again.`);
@@ -632,9 +674,15 @@ export default function BillsPage() {
                       )
                     ) : (
                       hasUserPaid(bill) ? (
-                        <p className="text-sm text-gray-600">
-                          {paidCount} / {totalPeople} people paid
-                        </p>
+                        paidCount === totalPeople ? (
+                          <p className="text-sm text-green-600 font-medium">
+                            ✓ All paid
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-600">
+                            {paidCount} / {totalPeople} people paid
+                          </p>
+                        )
                       ) : (
                         <button
                           onClick={(e) => handlePayClick(e, bill.id)}
@@ -941,11 +989,32 @@ export default function BillsPage() {
 
               {/* Split Bill - Add Participants */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-gray-700">Split Bill - Add Friends</h3>
+                <h3 className="font-semibold text-gray-700">Split Bill</h3>
+                
+                {/* Creator's Share */}
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <label className="block text-sm font-medium text-blue-900 mb-2">
+                    Your Share (You will pay) *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-900 font-medium">£</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={creatorShare}
+                      onChange={(e) => setCreatorShare(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <p className="text-xs text-blue-700 mt-1">
+                    This amount will be automatically marked as paid when you create the bill
+                  </p>
+                </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Friends to Split With
+                    Add Friends to Split With
                   </label>
                   {friends.length === 0 ? (
                     <p className="text-sm text-gray-500 py-2">
@@ -1000,15 +1069,34 @@ export default function BillsPage() {
                         </button>
                       </div>
                     ))}
-                    <p className="text-sm text-gray-600">
-                      Total assigned: £
-                      {splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)}
-                      {newBill.totalAmount && (
-                        <span className="ml-2">
-                          / £{parseFloat(newBill.totalAmount).toFixed(2)}
+                    <div className="p-3 bg-gray-100 rounded-lg border border-gray-300">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Your share:</span>
+                        <span className="text-lg font-bold text-blue-600">
+                          £{creatorShare ? parseFloat(creatorShare).toFixed(2) : '0.00'}
                         </span>
+                      </div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Others' total:</span>
+                        <span className="text-lg font-bold text-gray-600">
+                          £{splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-gray-300 flex justify-between items-center">
+                        <span className="text-sm font-semibold text-gray-900">Total assigned:</span>
+                        <span className="text-xl font-bold text-gray-900">
+                          £{((parseFloat(creatorShare) || 0) + splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)).toFixed(2)}
+                        </span>
+                      </div>
+                      {newBill.totalAmount && (
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-xs text-gray-500">Bill amount:</span>
+                          <span className="text-sm text-gray-500">
+                            £{parseFloat(newBill.totalAmount).toFixed(2)}
+                          </span>
+                        </div>
                       )}
-                    </p>
+                    </div>
                   </div>
                 )}
               </div>
