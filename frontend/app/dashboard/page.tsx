@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 export default function WalletDashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
+  const [creditHistory, setCreditHistory] = useState<any[]>([]);
   const [userGoal, setUserGoal] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,8 +58,18 @@ export default function WalletDashboard() {
 
       if (paymentError) console.error("Payments error:", paymentError);
 
+      // 4️⃣ Fetch credit history from credit_log table
+      const { data: creditLogData, error: creditLogError } = await supabase
+        .from("credit_log")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (creditLogError) console.error("Credit log error:", creditLogError);
+
       setProfile(profileData);
       setPayments(paymentData || []);
+      setCreditHistory(creditLogData || []);
       setLoading(false);
     };
 
@@ -224,6 +235,7 @@ export default function WalletDashboard() {
         <Tabs defaultValue="history">
         <TabsList className="mb-4">
           <TabsTrigger value="history">Payment History</TabsTrigger>
+          <TabsTrigger value="credits">Credit History</TabsTrigger>
         </TabsList>
 
         {/* 💳 Payment History Tab */}
@@ -279,6 +291,84 @@ export default function WalletDashboard() {
           </Card>
         </TabsContent>
 
+        {/* 💰 Credit History Tab */}
+        <TabsContent value="credits">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle>Credit Transaction History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {creditHistory.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">
+                  No credit transactions found yet 💰
+                </p>
+              ) : (
+                <table className="w-full text-left text-gray-600">
+                  <thead>
+                    <tr className="border-b text-sm text-gray-500">
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Amount</th>
+                      <th>Balance After</th>
+                      <th>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creditHistory.map((log) => {
+                      const changeAmount = Number(log.change_amount || 0);
+                      const isPositive = changeAmount > 0;
+                      const amount = Math.abs(changeAmount);
+                      
+                      return (
+                        <motion.tr
+                          key={log.log_id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.05 }}
+                          className="border-b hover:bg-blue-50"
+                        >
+                          <td className="py-3">
+                            {new Date(log.created_at).toLocaleDateString()}
+                          </td>
+                          <td>
+                            <span
+                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                isPositive
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {isPositive ? "➕ Earned" : "➖ Spent"}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={`font-semibold ${
+                                isPositive ? "text-green-600" : "text-red-600"
+                              }`}
+                            >
+                              {isPositive ? "+" : "-"}£{amount.toFixed(2)}
+                            </span>
+                          </td>
+                          <td className="font-medium">
+                            £{Number(log.balance_after || 0).toFixed(2)}
+                          </td>
+                          <td className="text-sm text-gray-600">
+                            {log.source_type === "payment" 
+                              ? "Payment reward" 
+                              : log.source_type === "redemption"
+                              ? "Reward redemption"
+                              : log.source_type || "Transaction"}
+                          </td>
+                        </motion.tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
         </Tabs>
       </motion.div>
     </motion.div>
