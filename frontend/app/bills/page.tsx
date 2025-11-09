@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -8,158 +8,323 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { supabase } from "@/lib/supabaseClient";
 
-// Hard-coded mock data
-const CURRENT_USER_ID = 1;
+interface Profile {
+  id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  avatar_url?: string;
+}
 
-const availableUsers = [
-  { id: 1, name: "Alice", avatar: "A" },
-  { id: 2, name: "Bob", avatar: "B" },
-  { id: 3, name: "Charlie", avatar: "C" },
-  { id: 4, name: "David", avatar: "D" },
-  { id: 5, name: "Emma", avatar: "E" },
-  { id: 6, name: "Frank", avatar: "F" },
-];
+interface Friend {
+  id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  avatar_url?: string;
+}
 
-const mockBills = [
-  {
-    id: 1,
-    name: "Electricity Bill",
-    amount: 125.50,
-    dueDate: "2025-11-15",
-    totalPeople: 4,
-    paidCount: 2,
-    participants: [
-      { id: 1, name: "Alice", avatar: "A", paid: true },
-      { id: 2, name: "Bob", avatar: "B", paid: true },
-      { id: 3, name: "Charlie", avatar: "C", paid: false },
-      { id: 4, name: "David", avatar: "D", paid: false },
-    ],
-  },
-  {
-    id: 2,
-    name: "Internet Bill",
-    amount: 45.00,
-    dueDate: "2025-11-20",
-    totalPeople: 4,
-    paidCount: 3,
-    participants: [
-      { id: 1, name: "Alice", avatar: "A", paid: false },
-      { id: 2, name: "Bob", avatar: "B", paid: true },
-      { id: 3, name: "Charlie", avatar: "C", paid: true },
-      { id: 4, name: "David", avatar: "D", paid: true },
-    ],
-  },
-  {
-    id: 3,
-    name: "Water Bill",
-    amount: 35.75,
-    dueDate: "2025-11-25",
-    totalPeople: 4,
-    paidCount: 1,
-    participants: [
-      { id: 1, name: "Alice", avatar: "A", paid: false },
-      { id: 2, name: "Bob", avatar: "B", paid: true },
-      { id: 3, name: "Charlie", avatar: "C", paid: false },
-      { id: 4, name: "David", avatar: "D", paid: false },
-    ],
-  },
-  {
-    id: 4,
-    name: "Rent",
-    amount: 1200.00,
-    dueDate: "2025-12-01",
-    totalPeople: 4,
-    paidCount: 4,
-    createdBy: 1, // Alice created this
-    participants: [
-      { id: 1, name: "Alice", avatar: "A", paid: true, amount: 300 },
-      { id: 2, name: "Bob", avatar: "B", paid: true, amount: 300 },
-      { id: 3, name: "Charlie", avatar: "C", paid: true, amount: 300 },
-      { id: 4, name: "David", avatar: "D", paid: true, amount: 300 },
-    ],
-  },
-].map(bill => ({ ...bill, createdBy: bill.createdBy || 2 }));
+interface BillParticipant {
+  id: string;
+  user_id: string;
+  amount_owed: number;
+  has_paid: boolean;
+  paid_at?: string;
+  profile: Profile;
+}
+
+interface Bill {
+  id: string;
+  user_id: string;
+  title: string;
+  amount: number;
+  due_date: string;
+  status: string;
+  description?: string;
+  receiver_bank?: string;
+  receiver_name?: string;
+  category?: string;
+  created_at: string;
+  bill_participants: BillParticipant[];
+}
 
 export default function BillsPage() {
-  const [bills, setBills] = useState(mockBills);
-  const [selectedBill, setSelectedBill] = useState<any>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
-  const [invitingBill, setInvitingBill] = useState<any>(null);
+  const [invitingBill, setInvitingBill] = useState<Bill | null>(null);
   const [filterType, setFilterType] = useState<"all" | "inviter" | "invited" | "history">("all");
+  const [loading, setLoading] = useState(true);
   
   // Create Bill Form State
   const [newBill, setNewBill] = useState({
     name: "",
     totalAmount: "",
     dueDate: "",
-    paymentType: "domestic", // domestic or international
-    accountNumber: "",
-    sortCode: "",
-    iban: "",
-    swift: "",
-    recipientName: "",
+    description: "",
+    category: "",
+    receiverBank: "",
+    receiverName: "",
   });
+  
+  // Creator's share amount
+  const [creatorShare, setCreatorShare] = useState("");
   
   // Split participants with custom amounts
   const [splitParticipants, setSplitParticipants] = useState<Array<{
-    userId: number;
+    userId: string;
     name: string;
     avatar: string;
     amount: string;
   }>>([]);
 
-  const hasUserPaid = (bill: any) => {
-    const currentUser = bill.participants.find((p: any) => p.id === CURRENT_USER_ID);
-    return currentUser?.paid || false;
-  };
-
-  const handlePayClick = (e: React.MouseEvent, billId: number) => {
-    e.stopPropagation();
-
-    setBills(prevBills => prevBills.map(bill => {
-      if (bill.id === billId) {
-        const updatedParticipants = bill.participants.map((p: any) => 
-          p.id === CURRENT_USER_ID ? { ...p, paid: true } : p
-        );
-
-        const newPaidCount = updatedParticipants.filter((p: any) => p.paid).length;
+  // Fetch current user and initialize data
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
         
-        return {
-          ...bill,
-          participants: updatedParticipants,
-          paidCount: newPaidCount
-        };
+        if (user) {
+          setCurrentUserId(user.id);
+          await Promise.all([
+            fetchBills(user.id),
+            fetchFriends(user.id)
+          ]);
+        }
+      } catch (error) {
+        console.error("Error initializing data:", error);
+      } finally {
+        setLoading(false);
       }
-      return bill;
-    }));
+    };
 
-    alert(`✅ Payment successful! You paid £${bills.find(b => b.id === billId)?.amount.toFixed(2)}`);
+    initializeData();
+  }, []);
+
+  // Fetch bills
+  const fetchBills = async (userId: string) => {
+    try {
+      // Fetch bills where user is creator or participant
+      const { data: createdBills, error: createdError } = await supabase
+        .from("bills")
+        .select(`
+          *,
+          bill_participants (
+            id,
+            user_id,
+            amount_owed,
+            has_paid,
+            paid_at,
+            profile:profiles (
+              id,
+              username,
+              first_name,
+              last_name,
+              avatar_url
+            )
+          )
+        `)
+        .eq("user_id", userId);
+
+      if (createdError) throw createdError;
+
+      // Fetch bills where user is a participant
+      const { data: participantBills, error: participantError } = await supabase
+        .from("bill_participants")
+        .select(`
+          bill:bills (
+            *,
+            bill_participants (
+              id,
+              user_id,
+              amount_owed,
+              has_paid,
+              paid_at,
+              profile:profiles (
+                id,
+                username,
+                first_name,
+                last_name,
+                avatar_url
+              )
+            )
+          )
+        `)
+        .eq("user_id", userId);
+
+      if (participantError) throw participantError;
+
+      // Combine and deduplicate bills
+      const allBills = [
+        ...(createdBills || []),
+        ...(participantBills?.map(pb => pb.bill).filter(Boolean) || [])
+      ];
+
+      const uniqueBills = Array.from(
+        new Map(allBills.map(bill => [bill.id, bill])).values()
+      );
+
+      setBills(uniqueBills as Bill[]);
+    } catch (error) {
+      console.error("Error fetching bills:", error);
+    }
   };
 
-  const handleDetailsClick = (bill: any) => {
+  // Fetch friends (only accepted friends)
+  const fetchFriends = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("friends")
+        .select(`
+          friend:profiles!friends_friend_id_fkey (
+            id,
+            username,
+            first_name,
+            last_name,
+            avatar_url
+          )
+        `)
+        .eq("user_id", userId)
+        .eq("status", "accepted");
+
+      if (error) throw error;
+
+      const friendsList = data?.map(d => d.friend).filter(Boolean).flat() || [];
+      setFriends(friendsList as unknown as Friend[]);
+    } catch (error) {
+      console.error("Error fetching friends:", error);
+    }
+  };
+
+  // Helper functions
+  const getUserDisplayName = (profile: Profile) => {
+    if (profile.first_name && profile.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    return profile.username || "Unknown";
+  };
+
+  const getInitials = (profile: Profile) => {
+    if (profile.first_name && profile.last_name) {
+      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
+    }
+    if (profile.username) {
+      return profile.username.substring(0, 2).toUpperCase();
+    }
+    return "?";
+  };
+
+  const hasUserPaid = (bill: Bill) => {
+    if (!currentUserId) return false;
+    const currentUser = bill.bill_participants?.find(p => p.user_id === currentUserId);
+    return currentUser?.has_paid || false;
+  };
+
+  const getPaidCount = (bill: Bill) => {
+    return bill.bill_participants?.filter(p => p.has_paid).length || 0;
+  };
+
+  const getTotalPeople = (bill: Bill) => {
+    return bill.bill_participants?.length || 0;
+  };
+
+  const isCreator = (bill: Bill) => {
+    return bill.user_id === currentUserId;
+  };
+
+  const handlePayClick = async (e: React.MouseEvent, billId: string) => {
+    e.stopPropagation();
+    if (!currentUserId) return;
+
+    try {
+      // Find the participant record for current user
+      const bill = bills.find(b => b.id === billId);
+      const participant = bill?.bill_participants?.find(p => p.user_id === currentUserId);
+      
+      if (!participant) {
+        alert("Error: Participant record not found");
+        return;
+      }
+
+      // Update participant payment status
+      const { error: updateError } = await supabase
+        .from("bill_participants")
+        .update({
+          has_paid: true,
+          paid_at: new Date().toISOString()
+        })
+        .eq("id", participant.id);
+
+      if (updateError) throw updateError;
+
+      // Create payment record
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .insert({
+          user_id: currentUserId,
+          bill_id: billId,
+          amount_paid: participant.amount_owed,
+          status: "success"
+        });
+
+      if (paymentError) throw paymentError;
+
+      // Check if all participants have paid
+      const { data: allParticipants, error: participantsError } = await supabase
+        .from("bill_participants")
+        .select("has_paid")
+        .eq("bill_id", billId);
+
+      if (participantsError) throw participantsError;
+
+      // If all participants have paid, update bill status to 'paid'
+      const allPaid = allParticipants?.every(p => p.has_paid) || false;
+      if (allPaid) {
+        const { error: billUpdateError } = await supabase
+          .from("bills")
+          .update({ status: "paid" })
+          .eq("id", billId);
+
+        if (billUpdateError) throw billUpdateError;
+      }
+
+      // Refresh bills
+      await fetchBills(currentUserId);
+      
+      alert(`✅ Payment successful! You paid £${Number(participant.amount_owed).toFixed(2)}`);
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      alert("Failed to process payment. Please try again.");
+    }
+  };
+
+  const handleDetailsClick = (bill: Bill) => {
     setSelectedBill(bill);
     setIsDialogOpen(true);
   };
 
-  const handleAddParticipant = (user: any) => {
-    if (!splitParticipants.find(p => p.userId === user.id)) {
+  const handleAddParticipant = (friend: Friend) => {
+    if (!splitParticipants.find(p => p.userId === friend.id)) {
       const currentTotal = parseFloat(newBill.totalAmount) || 0;
       const newParticipantCount = splitParticipants.length + 1;
       const averageAmount = currentTotal > 0 ? (currentTotal / newParticipantCount).toFixed(2) : "";
       
       setSplitParticipants([...splitParticipants, {
-        userId: user.id,
-        name: user.name,
-        avatar: user.avatar,
+        userId: friend.id,
+        name: getUserDisplayName(friend),
+        avatar: getInitials(friend),
         amount: averageAmount
       }]);
     }
   };
 
-  const handleRemoveParticipant = (userId: number) => {
+  const handleRemoveParticipant = (userId: string) => {
     const updatedParticipants = splitParticipants.filter(p => p.userId !== userId);
   
     if (updatedParticipants.length > 0 && newBill.totalAmount) {
@@ -174,15 +339,25 @@ export default function BillsPage() {
     }
   };
 
-  const handleUpdateAmount = (userId: number, amount: string) => {
+  const handleUpdateAmount = (userId: string, amount: string) => {
     setSplitParticipants(splitParticipants.map(p => 
       p.userId === userId ? { ...p, amount } : p
     ));
   };
 
-  const handleCreateBill = () => {
+  const handleCreateBill = async () => {
+    if (!currentUserId) {
+      alert("⚠️ Please log in to create a bill");
+      return;
+    }
+
     if (!newBill.name || !newBill.totalAmount || !newBill.dueDate) {
       alert("⚠️ Please fill in all required fields (Name, Amount, Due Date)");
+      return;
+    }
+
+    if (!creatorShare) {
+      alert("⚠️ Please enter your share amount");
       return;
     }
 
@@ -197,10 +372,17 @@ export default function BillsPage() {
       return;
     }
 
-    const totalAssigned = splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    const creatorAmount = parseFloat(creatorShare);
+    if (isNaN(creatorAmount) || creatorAmount <= 0) {
+      alert("⚠️ Please enter a valid amount for your share");
+      return;
+    }
+
+    const othersTotal = splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    const totalAssigned = creatorAmount + othersTotal;
     
     if (Math.abs(totalAssigned - billTotal) > 0.01) {
-      alert(`⚠️ Total assigned (£${totalAssigned.toFixed(2)}) must equal bill amount (£${billTotal.toFixed(2)})`);
+      alert(`⚠️ Total assigned (£${totalAssigned.toFixed(2)}) must equal bill amount (£${billTotal.toFixed(2)})\nYour share: £${creatorAmount.toFixed(2)}\nOthers: £${othersTotal.toFixed(2)}`);
       return;
     }
 
@@ -210,97 +392,152 @@ export default function BillsPage() {
       return;
     }
 
-    if (newBill.paymentType === "domestic") {
-      if (!newBill.accountNumber || !newBill.sortCode) {
-        alert("⚠️ Please enter account number and sort code for UK payment");
+    try {
+      // Create the bill
+      const { data: billData, error: billError } = await supabase
+        .from("bills")
+        .insert({
+          user_id: currentUserId,
+          title: newBill.name,
+          amount: billTotal,
+          due_date: newBill.dueDate,
+          description: newBill.description || null,
+          category: newBill.category || null,
+          receiver_bank: newBill.receiverBank || null,
+          receiver_name: newBill.receiverName || null,
+          status: "unpaid"
+        })
+        .select()
+        .single();
+
+      if (billError) {
+        console.error("Bill creation error:", billError);
+        alert(`Failed to create bill: ${billError.message}`);
         return;
       }
-    } else {
-      if (!newBill.iban || !newBill.swift) {
-        alert("⚠️ Please enter IBAN and SWIFT/BIC for international payment");
+
+      if (!billData) {
+        alert("Failed to create bill: No data returned");
         return;
       }
-    }
 
-    const createdBill = {
-      id: Math.max(...bills.map(b => b.id), 0) + 1,
-      name: newBill.name,
-      amount: billTotal,
-      dueDate: newBill.dueDate,
-      totalPeople: splitParticipants.length,
-      paidCount: 0,
-      createdBy: CURRENT_USER_ID,
-      participants: splitParticipants.map(p => ({
-        id: p.userId,
-        name: p.name,
-        avatar: p.avatar,
-        paid: false,
-        amount: parseFloat(p.amount)
-      })),
-      paymentInfo: {
-        type: newBill.paymentType,
-        accountNumber: newBill.accountNumber,
-        sortCode: newBill.sortCode,
-        iban: newBill.iban,
-        swift: newBill.swift,
-        recipientName: newBill.recipientName,
+      // Create participant records including the creator
+      const participantRecords = [
+        // Creator as participant (automatically paid)
+        {
+          bill_id: billData.id,
+          user_id: currentUserId,
+          amount_owed: creatorAmount,
+          has_paid: true,
+          paid_at: new Date().toISOString()
+        },
+        // Other participants
+        ...splitParticipants.map(p => ({
+          bill_id: billData.id,
+          user_id: p.userId,
+          amount_owed: parseFloat(p.amount),
+          has_paid: false
+        }))
+      ];
+
+      const { error: participantsError } = await supabase
+        .from("bill_participants")
+        .insert(participantRecords);
+
+      if (participantsError) {
+        console.error("Participants creation error:", participantsError);
+        alert(`Failed to add participants: ${participantsError.message}`);
+        return;
       }
-    };
 
-    setBills([createdBill, ...bills]);
+      // Create payment record for the creator
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .insert({
+          user_id: currentUserId,
+          bill_id: billData.id,
+          amount_paid: creatorAmount,
+          status: "success"
+        });
+
+      if (paymentError) {
+        console.error("Payment creation error:", paymentError);
+        // Don't return here, payment record is optional
+      }
+
+      // Refresh bills
+      await fetchBills(currentUserId);
   
-    setNewBill({
-      name: "",
-      totalAmount: "",
-      dueDate: "",
-      paymentType: "domestic",
-      accountNumber: "",
-      sortCode: "",
-      iban: "",
-      swift: "",
-      recipientName: "",
-    });
-    setSplitParticipants([]);
-    setSplitParticipants([]);
-    setIsCreateDialogOpen(false);
-    
-    alert(`✅ Bill "${newBill.name}" created successfully!\n${splitParticipants.length} participants added.`);
+      setNewBill({
+        name: "",
+        totalAmount: "",
+        dueDate: "",
+        description: "",
+        category: "",
+        receiverBank: "",
+        receiverName: "",
+      });
+      setCreatorShare("");
+      setSplitParticipants([]);
+      setIsCreateDialogOpen(false);
+      
+      alert(`✅ Bill "${newBill.name}" created successfully!\nYour share: £${creatorAmount.toFixed(2)} (paid)\nOther participants: ${splitParticipants.length}`);
+    } catch (error) {
+      console.error("Error creating bill:", error);
+      alert(`Failed to create bill. Please try again.`);
+    }
   };
 
-  // Selecting bills
+  // Selecting bills based on filter
   const filteredBills = bills.filter(bill => {
+    const paidCount = getPaidCount(bill);
+    const totalPeople = getTotalPeople(bill);
+    const isFullyPaid = bill.status === "paid" || paidCount === totalPeople;
+    
     if (filterType === "inviter") {
-      return bill.createdBy === CURRENT_USER_ID && bill.paidCount < bill.totalPeople;
+      // Bills created by current user that are not fully paid
+      return isCreator(bill) && !isFullyPaid;
     } else if (filterType === "invited") {
-      return bill.createdBy !== CURRENT_USER_ID && bill.paidCount < bill.totalPeople;
+      // Bills where user is participant (not creator) and not fully paid
+      return !isCreator(bill) && !isFullyPaid;
     } else if (filterType === "history") {
-      return bill.paidCount === bill.totalPeople;
+      // Bills that are fully paid
+      return isFullyPaid;
     }
     return true; // all
   });
 
-  const isCreator = (bill: any) => bill.createdBy === CURRENT_USER_ID;
-
-  const handleInviteClick = (e: React.MouseEvent, bill: any) => {
+  const handleInviteClick = (e: React.MouseEvent, bill: Bill) => {
     e.stopPropagation();
     setInvitingBill(bill);
     setIsInviteDialogOpen(true);
   };
 
-  const handleSendInvitation = (participantIds: number[]) => {
+  const handleSendInvitation = (participantIds: string[]) => {
     if (participantIds.length === 0) {
       alert("Please select at least one participant to invite");
       return;
     }
 
-    const participantNames = invitingBill.participants
-      .filter((p: any) => participantIds.includes(p.id) && !p.paid)
-      .map((p: any) => p.name)
+    const participantNames = invitingBill?.bill_participants
+      ?.filter(p => participantIds.includes(p.user_id) && !p.has_paid)
+      .map(p => getUserDisplayName(p.profile))
       .join(", ");
     
     alert(`✅ Invitation sent to: ${participantNames}`);
     setIsInviteDialogOpen(false);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-gray-600">Loading bills...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8">
@@ -378,7 +615,12 @@ export default function BillsPage() {
               </p>
             </div>
           ) : (
-            filteredBills.map((bill) => (
+            filteredBills.map((bill) => {
+              const paidCount = getPaidCount(bill);
+              const totalPeople = getTotalPeople(bill);
+              const isFullyPaid = bill.status === "paid" || paidCount === totalPeople;
+              
+              return (
             <Card
               key={bill.id}
               className="hover:shadow-lg transition-shadow cursor-pointer"
@@ -388,16 +630,37 @@ export default function BillsPage() {
                 <div className="flex justify-between">
                   {/* Left Side */}
                   <div className="flex-1 space-y-2">
-                    <h3 className="text-xl font-semibold text-gray-800">
-                      {bill.name}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xl font-semibold text-gray-800">
+                        {bill.title}
+                      </h3>
+                      {/* Status Badge */}
+                      {isFullyPaid && (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                          PAID
+                        </span>
+                      )}
+                      {/* Category Badge */}
+                      {bill.category && (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full capitalize">
+                          {bill.category}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-2xl font-bold text-blue-600">
-                      £{bill.amount.toFixed(2)}
+                      £{Number(bill.amount).toFixed(2)}
                     </p>
+                    
+                    {/* Description */}
+                    {bill.description && (
+                      <p className="text-sm text-gray-600 line-clamp-1">
+                        {bill.description}
+                      </p>
+                    )}
 
                     {/* Distinguish the role of user */}
                     {isCreator(bill) ? (
-                      bill.paidCount < bill.totalPeople ? (
+                      paidCount < totalPeople ? (
                         <button
                           onClick={(e) => handleInviteClick(e, bill)}
                           className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
@@ -411,9 +674,15 @@ export default function BillsPage() {
                       )
                     ) : (
                       hasUserPaid(bill) ? (
-                        <p className="text-sm text-gray-600">
-                          {bill.paidCount} / {bill.totalPeople} people paid
-                        </p>
+                        paidCount === totalPeople ? (
+                          <p className="text-sm text-green-600 font-medium">
+                            ✓ All paid
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-600">
+                            {paidCount} / {totalPeople} people paid
+                          </p>
+                        )
                       ) : (
                         <button
                           onClick={(e) => handlePayClick(e, bill.id)}
@@ -430,7 +699,7 @@ export default function BillsPage() {
                     <div className="text-right">
                       <p className="text-sm text-gray-500">Due Date</p>
                       <p className="text-lg font-medium text-gray-800">
-                        {new Date(bill.dueDate).toLocaleDateString("en-GB", {
+                        {new Date(bill.due_date).toLocaleDateString("en-GB", {
                           day: "numeric",
                           month: "short",
                           year: "numeric",
@@ -440,17 +709,17 @@ export default function BillsPage() {
 
                     {/* Avatar List */}
                     <div className="flex -space-x-2">
-                      {bill.participants.map((participant) => (
+                      {bill.bill_participants?.map((participant) => (
                         <div
                           key={participant.id}
                           className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold border-2 border-white ${
-                            participant.paid
+                            participant.has_paid
                               ? "bg-green-500"
                               : "bg-gray-400"
                           }`}
-                          title={participant.name}
+                          title={getUserDisplayName(participant.profile)}
                         >
-                          {participant.avatar}
+                          {getInitials(participant.profile)}
                         </div>
                       ))}
                     </div>
@@ -462,7 +731,7 @@ export default function BillsPage() {
                 </div>
               </CardContent>
             </Card>
-          )))}
+          )}))}
         </div>
 
         {/* Details Dialog */}
@@ -470,7 +739,7 @@ export default function BillsPage() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold">
-                {selectedBill?.name}
+                {selectedBill?.title}
               </DialogTitle>
             </DialogHeader>
 
@@ -480,25 +749,68 @@ export default function BillsPage() {
                 <div>
                   <p className="text-sm text-gray-500">Amount</p>
                   <p className="text-xl font-bold text-blue-600">
-                    £{selectedBill?.amount.toFixed(2)}
+                    £{selectedBill?.amount ? Number(selectedBill.amount).toFixed(2) : '0.00'}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Due Date</p>
                   <p className="text-lg font-medium">
                     {selectedBill &&
-                      new Date(selectedBill.dueDate).toLocaleDateString(
+                      new Date(selectedBill.due_date).toLocaleDateString(
                         "en-GB"
                       )}
                   </p>
                 </div>
+                {selectedBill?.category && (
+                  <div>
+                    <p className="text-sm text-gray-500">Category</p>
+                    <p className="text-lg font-medium capitalize">
+                      {selectedBill.category}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-gray-500">Status</p>
+                  <p className={`text-lg font-medium ${
+                    selectedBill?.status === "paid" ? "text-green-600" : "text-orange-600"
+                  }`}>
+                    {selectedBill?.status === "paid" ? "Paid" : "Unpaid"}
+                  </p>
+                </div>
               </div>
+
+              {/* Description */}
+              {selectedBill?.description && (
+                <div className="pb-4 border-b">
+                  <p className="text-sm text-gray-500 mb-1">Description</p>
+                  <p className="text-gray-700">{selectedBill.description}</p>
+                </div>
+              )}
+
+              {/* Receiver Information */}
+              {(selectedBill?.receiver_name || selectedBill?.receiver_bank) && (
+                <div className="pb-4 border-b">
+                  <p className="text-sm text-gray-500 mb-2">Receiver Information</p>
+                  <div className="space-y-1">
+                    {selectedBill.receiver_name && (
+                      <p className="text-sm">
+                        <span className="font-medium">Name:</span> {selectedBill.receiver_name}
+                      </p>
+                    )}
+                    {selectedBill.receiver_bank && (
+                      <p className="text-sm">
+                        <span className="font-medium">Bank:</span> {selectedBill.receiver_bank}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Payment Status */}
               <div>
                 <h4 className="font-semibold text-gray-700 mb-3">
-                  Payment Status ({selectedBill?.paidCount} /{" "}
-                  {selectedBill?.totalPeople})
+                  Payment Status ({selectedBill ? getPaidCount(selectedBill) : 0} /{" "}
+                  {selectedBill ? getTotalPeople(selectedBill) : 0})
                 </h4>
 
                 {/* Paid People */}
@@ -507,19 +819,24 @@ export default function BillsPage() {
                     ✓ Paid
                   </p>
                   <div className="space-y-2">
-                    {selectedBill?.participants
-                      .filter((p: any) => p.paid)
-                      .map((participant: any) => (
+                    {selectedBill?.bill_participants
+                      ?.filter(p => p.has_paid)
+                      .map((participant) => (
                         <div
                           key={participant.id}
                           className="flex items-center space-x-3 p-2 bg-green-50 rounded-lg"
                         >
                           <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-white font-semibold">
-                            {participant.avatar}
+                            {getInitials(participant.profile)}
                           </div>
-                          <span className="font-medium text-gray-800">
-                            {participant.name}
-                          </span>
+                          <div className="flex-1">
+                            <span className="font-medium text-gray-800">
+                              {getUserDisplayName(participant.profile)}
+                            </span>
+                            <p className="text-sm text-gray-500">
+                              £{Number(participant.amount_owed).toFixed(2)}
+                            </p>
+                          </div>
                         </div>
                       ))}
                   </div>
@@ -531,19 +848,24 @@ export default function BillsPage() {
                     ○ Not Paid
                   </p>
                   <div className="space-y-2">
-                    {selectedBill?.participants
-                      .filter((p: any) => !p.paid)
-                      .map((participant: any) => (
+                    {selectedBill?.bill_participants
+                      ?.filter(p => !p.has_paid)
+                      .map((participant) => (
                         <div
                           key={participant.id}
                           className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg"
                         >
                           <div className="w-10 h-10 rounded-full bg-gray-400 flex items-center justify-center text-white font-semibold">
-                            {participant.avatar}
+                            {getInitials(participant.profile)}
                           </div>
-                          <span className="font-medium text-gray-800">
-                            {participant.name}
-                          </span>
+                          <div className="flex-1">
+                            <span className="font-medium text-gray-800">
+                              {getUserDisplayName(participant.profile)}
+                            </span>
+                            <p className="text-sm text-gray-500">
+                              £{Number(participant.amount_owed).toFixed(2)}
+                            </p>
+                          </div>
                         </div>
                       ))}
                   </div>
@@ -611,116 +933,111 @@ export default function BillsPage() {
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-700">Payment Information</h3>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Payment Type
-                  </label>
-                  <select
-                    value={newBill.paymentType}
-                    onChange={(e) => setNewBill({ ...newBill, paymentType: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="domestic">UK Domestic Payment</option>
-                    <option value="international">International Payment</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Receiver Bank
+                    </label>
+                    <input
+                      type="text"
+                      value={newBill.receiverBank}
+                      onChange={(e) => setNewBill({ ...newBill, receiverBank: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., HSBC"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Receiver Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newBill.receiverName}
+                      onChange={(e) => setNewBill({ ...newBill, receiverName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Recipient name"
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Recipient Name
+                    Category
                   </label>
                   <input
                     type="text"
-                    value={newBill.recipientName}
-                    onChange={(e) => setNewBill({ ...newBill, recipientName: e.target.value })}
+                    value={newBill.category}
+                    onChange={(e) => setNewBill({ ...newBill, category: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Recipient name"
+                    placeholder="e.g., Utilities, Rent"
                   />
                 </div>
 
-                {newBill.paymentType === "domestic" ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Account Number
-                      </label>
-                      <input
-                        type="text"
-                        value={newBill.accountNumber}
-                        onChange={(e) => setNewBill({ ...newBill, accountNumber: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="12345678"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Sort Code
-                      </label>
-                      <input
-                        type="text"
-                        value={newBill.sortCode}
-                        onChange={(e) => setNewBill({ ...newBill, sortCode: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="12-34-56"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        IBAN
-                      </label>
-                      <input
-                        type="text"
-                        value={newBill.iban}
-                        onChange={(e) => setNewBill({ ...newBill, iban: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="GB29 NWBK 6016 1331 9268 19"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        SWIFT/BIC
-                      </label>
-                      <input
-                        type="text"
-                        value={newBill.swift}
-                        onChange={(e) => setNewBill({ ...newBill, swift: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="NWBKGB2L"
-                      />
-                    </div>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={newBill.description}
+                    onChange={(e) => setNewBill({ ...newBill, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Additional details about this bill"
+                    rows={3}
+                  />
+                </div>
               </div>
 
               {/* Split Bill - Add Participants */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-gray-700">Split Bill - Add Participants</h3>
+                <h3 className="font-semibold text-gray-700">Split Bill</h3>
+                
+                {/* Creator's Share */}
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <label className="block text-sm font-medium text-blue-900 mb-2">
+                    Your Share (You will pay) *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-900 font-medium">£</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={creatorShare}
+                      onChange={(e) => setCreatorShare(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <p className="text-xs text-blue-700 mt-1">
+                    This amount will be automatically marked as paid when you create the bill
+                  </p>
+                </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select People to Split With
+                    Add Friends to Split With
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableUsers
-                      .filter(u => u.id !== CURRENT_USER_ID)
-                      .map(user => (
+                  {friends.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">
+                      No friends available. Add friends to split bills with them.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {friends.map(friend => (
                         <button
-                          key={user.id}
-                          onClick={() => handleAddParticipant(user)}
-                          disabled={splitParticipants.some(p => p.userId === user.id)}
+                          key={friend.id}
+                          onClick={() => handleAddParticipant(friend)}
+                          disabled={splitParticipants.some(p => p.userId === friend.id)}
                           className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                            splitParticipants.some(p => p.userId === user.id)
+                            splitParticipants.some(p => p.userId === friend.id)
                               ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                               : "bg-blue-100 text-blue-700 hover:bg-blue-200"
                           }`}
                         >
-                          {user.avatar} {user.name}
+                          {getInitials(friend)} {getUserDisplayName(friend)}
                         </button>
                       ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Participants List with Custom Amounts */}
@@ -752,15 +1069,34 @@ export default function BillsPage() {
                         </button>
                       </div>
                     ))}
-                    <p className="text-sm text-gray-600">
-                      Total assigned: £
-                      {splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)}
-                      {newBill.totalAmount && (
-                        <span className="ml-2">
-                          / £{parseFloat(newBill.totalAmount).toFixed(2)}
+                    <div className="p-3 bg-gray-100 rounded-lg border border-gray-300">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Your share:</span>
+                        <span className="text-lg font-bold text-blue-600">
+                          £{creatorShare ? parseFloat(creatorShare).toFixed(2) : '0.00'}
                         </span>
+                      </div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Others' total:</span>
+                        <span className="text-lg font-bold text-gray-600">
+                          £{splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-gray-300 flex justify-between items-center">
+                        <span className="text-sm font-semibold text-gray-900">Total assigned:</span>
+                        <span className="text-xl font-bold text-gray-900">
+                          £{((parseFloat(creatorShare) || 0) + splitParticipants.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)).toFixed(2)}
+                        </span>
+                      </div>
+                      {newBill.totalAmount && (
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-xs text-gray-500">Bill amount:</span>
+                          <span className="text-sm text-gray-500">
+                            £{parseFloat(newBill.totalAmount).toFixed(2)}
+                          </span>
+                        </div>
                       )}
-                    </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -789,7 +1125,7 @@ export default function BillsPage() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold">
-                Invite Payers - {invitingBill?.name}
+                Invite Payers - {invitingBill?.title}
               </DialogTitle>
             </DialogHeader>
 
@@ -801,9 +1137,9 @@ export default function BillsPage() {
 
                 {/* List of unpaid participants */}
                 <div className="space-y-2">
-                  {invitingBill?.participants
-                    .filter((p: any) => !p.paid)
-                    .map((participant: any) => (
+                  {invitingBill?.bill_participants
+                    ?.filter(p => !p.has_paid)
+                    .map((participant) => (
                       <label
                         key={participant.id}
                         className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
@@ -812,22 +1148,24 @@ export default function BillsPage() {
                           type="checkbox"
                           defaultChecked
                           className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
-                          data-participant-id={participant.id}
+                          data-participant-id={participant.user_id}
                         />
                         <div className="w-10 h-10 rounded-full bg-gray-400 flex items-center justify-center text-white font-semibold">
-                          {participant.avatar}
+                          {getInitials(participant.profile)}
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-gray-800">{participant.name}</p>
+                          <p className="font-medium text-gray-800">
+                            {getUserDisplayName(participant.profile)}
+                          </p>
                           <p className="text-sm text-gray-500">
-                            Amount: £{participant.amount?.toFixed(2) || (invitingBill.amount / invitingBill.totalPeople).toFixed(2)}
+                            Amount: £{Number(participant.amount_owed).toFixed(2)}
                           </p>
                         </div>
                       </label>
                     ))}
                 </div>
 
-                {invitingBill?.participants.filter((p: any) => !p.paid).length === 0 && (
+                {invitingBill?.bill_participants?.filter(p => !p.has_paid).length === 0 && (
                   <p className="text-center text-gray-500 py-4">
                     All participants have paid! 🎉
                   </p>
@@ -847,11 +1185,11 @@ export default function BillsPage() {
                     const checkboxes = document.querySelectorAll('input[type="checkbox"][data-participant-id]');
                     const selectedIds = Array.from(checkboxes)
                       .filter((cb: any) => cb.checked)
-                      .map((cb: any) => parseInt(cb.dataset.participantId));
+                      .map((cb: any) => cb.dataset.participantId);
                     handleSendInvitation(selectedIds);
                   }}
                   className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                  disabled={invitingBill?.participants.filter((p: any) => !p.paid).length === 0}
+                  disabled={invitingBill?.bill_participants?.filter(p => !p.has_paid).length === 0}
                 >
                   Send Invitations
                 </button>
