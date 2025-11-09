@@ -291,6 +291,31 @@ export default function BillsPage() {
 
         const newCredits = (profile?.credits || 0) + creditToAdd;
 
+        // Log to credit_log first
+        const { data: paymentData } = await supabase
+          .from("payments")
+          .select("id")
+          .eq("user_id", currentUserId)
+          .eq("bill_id", billId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        const { error: logError } = await supabase.from("credit_log").insert([
+          {
+            user_id: currentUserId,
+            source_type: "payment",
+            source_id: paymentData?.id || null,
+            change_amount: creditToAdd,
+            balance_after: newCredits,
+          },
+        ]);
+
+        if (logError) {
+          console.error("Error logging credit transaction:", logError);
+        }
+
+        // Update profile credits
         const { error: updateCreditsError } = await supabase
           .from("profiles")
           .update({ credits: newCredits })
