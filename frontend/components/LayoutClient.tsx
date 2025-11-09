@@ -29,22 +29,70 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   // 1. ❗️ RENAMED: from friendRequestCount to unreadCount for clarity
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  // 2. ❗️ REPLACED: This useEffect now listens for the global count
+  // 2. ❗️ Load and calculate unread count on mount
   useEffect(() => {
-    // 1. Set the initial count from localStorage on load
-    const initialCount = parseInt(localStorage.getItem('unreadNotificationCount') || '0', 10);
-    setUnreadCount(initialCount);
+    const loadUnreadCount = async () => {
+      try {
+        // Get current user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setUnreadCount(0);
+          return;
+        }
 
-    // 2. Define the listener for the custom event from InboxPage
+        // Get dismissed notifications
+        let dismissedIds: string[] = [];
+        try {
+          const rawDismissed = localStorage.getItem('dismissedNotifications');
+          dismissedIds = rawDismissed ? JSON.parse(rawDismissed) : [];
+        } catch (e) {
+          dismissedIds = [];
+        }
+
+        // Fetch friend requests
+        const { data: friendRequests, error: friendError } = await supabase
+          .from('friends')
+          .select('id')
+          .eq('friend_id', user.id)
+          .eq('status', 'pending');
+
+        // Fetch bill invitations
+        const { data: billInvitations, error: billError } = await supabase
+          .from('bill_participants')
+          .select('id, bill:bills!inner(user_id)')
+          .eq('user_id', user.id)
+          .eq('has_paid', false);
+
+        // Filter out dismissed and own bills
+        const validFriendRequests = (friendRequests || []).filter(
+          (r: any) => !dismissedIds.includes(r.id)
+        );
+
+        const validBillInvitations = (billInvitations || []).filter(
+          (p: any) => !dismissedIds.includes(p.id) && p.bill?.user_id !== user.id
+        );
+
+        const totalCount = validFriendRequests.length + validBillInvitations.length;
+        
+        setUnreadCount(totalCount);
+        localStorage.setItem('unreadNotificationCount', totalCount.toString());
+      } catch (error) {
+        console.error('Error loading unread count:', error);
+      }
+    };
+
+    // Load initial count
+    loadUnreadCount();
+
+    // Listen for updates from Inbox page
     const handleNotificationsUpdate = (event: Event) => {
       const customEvent = event as CustomEvent;
       setUnreadCount(customEvent.detail);
     };
 
-    // 3. Listen for the custom event
     window.addEventListener('notifications-updated', handleNotificationsUpdate);
 
-    // 4. Fallback: Also listen for storage changes (in case another tab updates)
+    // Listen for storage changes (cross-tab sync)
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === 'unreadNotificationCount') {
         setUnreadCount(parseInt(event.newValue || '0', 10));
@@ -52,7 +100,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // 5. Clean up listeners
+    // Clean up listeners
     return () => {
       window.removeEventListener('notifications-updated', handleNotificationsUpdate);
       window.removeEventListener('storage', handleStorageChange);
