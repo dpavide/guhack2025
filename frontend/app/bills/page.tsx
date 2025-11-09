@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabaseClient";
+import { validateBankCard, processBankPayment } from "@/lib/bankApi";
 import Image from "next/image";
 import { motion } from "framer-motion";
 
@@ -60,6 +61,24 @@ export default function BillsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [payingBill, setPayingBill] = useState<Bill | null>(null);
+  const [cardDetails, setCardDetails] = useState({
+    accountNumber: "", // 16-digit card number
+    cardHolderName: "",
+    cvv: "",
+    expiryDate: ""
+  });
+  const [cardValidation, setCardValidation] = useState<{
+    valid: boolean;
+    message: string;
+    cardHolderName?: string;
+    bankName?: string;
+    balance?: number;
+    maskedCardNumber?: string;
+  } | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [invitingBill, setInvitingBill] = useState<Bill | null>(null);
   const [filterType, setFilterType] = useState<"all" | "inviter" | "invited" | "history">("all");
   const [loading, setLoading] = useState(true);
@@ -240,120 +259,218 @@ export default function BillsPage() {
     return bill.user_id === currentUserId;
   };
 
-  const handlePayClick = async (e: React.MouseEvent, billId: string) => {
-      e.stopPropagation();
-      if (!currentUserId) return;
+  const handlePayClick = async (e: React.MouseEvent, bill: Bill) => {
+    e.stopPropagation();
+    if (!currentUserId) return;
 
-      // We must declare creditToAdd outside the nested try block 
-      // to use it in the final alert.
-      let creditToAdd = 0; 
-      let participant: any = null; // Declare participant outside try/catch
+    // Open payment dialog
+    setPayingBill(bill);
+    setIsPaymentDialogOpen(true);
+    setCardDetails({
+      accountNumber: "",
+      cardHolderName: "",
+      cvv: "",
+      expiryDate: ""
+    });
+    setCardValidation(null);
+  };
+
+  const handleValidateCard = async () => {
+    // Validate all fields are filled
+    if (!cardDetails.accountNumber || 
+        !cardDetails.cardHolderName || !cardDetails.cvv || !cardDetails.expiryDate) {
+      setCardValidation({
+        valid: false,
+        message: "Please fill in all card details"
+      });
+      return;
+    }
+
+    // Validate card number (16 digits)
+    if (!/^\d{16}$/.test(cardDetails.accountNumber.replace(/\s/g, ''))) {
+      setCardValidation({
+        valid: false,
+        message: "Card number must be 16 digits"
+      });
+      return;
+    }
+
+    // Validate CVV (3 digits)
+    if (!/^\d{3}$/.test(cardDetails.cvv)) {
+      setCardValidation({
+        valid: false,
+        message: "CVV must be 3 digits"
+      });
+      return;
+    }
+
+    // Validate expiry date format (MM/YY)
+    if (!/^\d{2}\/\d{2}$/.test(cardDetails.expiryDate)) {
+      setCardValidation({
+        valid: false,
+        message: "Expiry date must be in format MM/YY (e.g., 12/28)"
+      });
+      return;
+    }
+
+    setIsValidating(true);
+    try {
+      const validation = await validateBankCard({
+        account_number: cardDetails.accountNumber,
+        card_holder_name: cardDetails.cardHolderName,
+        cvv: cardDetails.cvv,
+        expiry_date: cardDetails.expiryDate
+      });
+      
+      setCardValidation({
+        valid: validation.valid,
+        message: validation.message || "",
+        cardHolderName: validation.card_holder_name,
+        bankName: validation.bank_name,
+        balance: validation.balance,
+        maskedCardNumber: validation.masked_card_number
+      });
+    } catch (error) {
+      setCardValidation({
+        valid: false,
+        message: "Error validating card. Please try again."
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!currentUserId || !payingBill || !cardValidation?.valid) return;
+
+    const participant = payingBill.bill_participants?.find(p => p.user_id === currentUserId);
+    if (!participant) {
+      alert("Error: Participant record not found");
+      return;
+    }
+
+    const amountToPay = participant.amount_owed;
+
+    setIsProcessingPayment(true);
+    try {
+      // Process payment with bank card
+      const paymentResult = await processBankPayment({
+        account_number: cardDetails.accountNumber,
+        card_holder_name: cardDetails.cardHolderName,
+        cvv: cardDetails.cvv,
+        expiry_date: cardDetails.expiryDate,
+        amount: amountToPay
+      });
+      
+      if (!paymentResult.success) {
+        alert(paymentResult.message);
+        setIsProcessingPayment(false);
+        return;
+      }
+
+      // Payment successful, update database
+      let creditToAdd = 0;
+
+      // Update participant payment status
+      const { error: updateError } = await supabase
+        .from("bill_participants")
+        .update({
+          has_paid: true,
+          paid_at: new Date().toISOString()
+        })
+        .eq("id", participant.id);
+
+      if (updateError) throw updateError;
+
+      // Create payment record
+      const { data: insertedPayment, error: paymentError } = await supabase
+        .from("payments")
+        .insert({
+          user_id: currentUserId,
+          bill_id: payingBill.id,
+          amount_paid: participant.amount_owed,
+          status: "success"
+        })
+        .select("id")
+        .single();
+
+      if (paymentError) throw paymentError;
+      
+      const paymentId = insertedPayment.id;
+      
+      // Add 5% of payment as credits to profile
+      creditToAdd = participant.amount_owed * 0.05;
 
       try {
-        // Find the participant record for current user
-        const bill = bills.find(b => b.id === billId);
-        participant = bill?.bill_participants?.find(p => p.user_id === currentUserId);
-        
-        if (!participant) {
-          alert("Error: Participant record not found");
-          return;
-        }
+        // Get current credits
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("credits")
+          .eq("id", currentUserId)
+          .single();
 
-        // Update participant payment status
-        const { error: updateError } = await supabase
-          .from("bill_participants")
-          .update({
-            has_paid: true,
-            paid_at: new Date().toISOString()
-          })
-          .eq("id", participant.id);
+        if (profileError) throw profileError;
 
-        if (updateError) throw updateError;
+        const newCredits = (profile?.credits || 0) + creditToAdd;
 
-        // Create payment record (This should be the first DB operation to use the ID later)
-        // We need to use .select("id").single() here to get the payment ID immediately.
-        const { data: insertedPayment, error: paymentError } = await supabase
-          .from("payments")
-          .insert({
+        // Log to credit_log
+        const { error: logError } = await supabase.from("credit_log").insert([
+          {
             user_id: currentUserId,
-            bill_id: billId,
-            amount_paid: participant.amount_owed,
-            status: "success"
-          })
-          .select("id")
-          .single(); // Use the inserted ID directly
+            source_type: "payment",
+            source_id: paymentId,
+            change_amount: creditToAdd,
+            balance_after: newCredits,
+          },
+        ]);
 
-        if (paymentError) throw paymentError;
-        
-        const paymentId = insertedPayment.id;
-        
-        // 3️⃣ Add 5% of payment as credits to profile
-        creditToAdd = participant.amount_owed * 0.05; // Set the amount here
-
-        try {
-          // Get current credits
-          const { data: profile, error: profileError } = await supabase
-            .from("profiles")
-            .select("credits")
-            .eq("id", currentUserId)
-            .single();
-
-          if (profileError) throw profileError;
-
-          const newCredits = (profile?.credits || 0) + creditToAdd;
-
-          // Log to credit_log first (using the insertedPayment ID)
-          const { error: logError } = await supabase.from("credit_log").insert([
-            {
-              user_id: currentUserId,
-              source_type: "payment",
-              source_id: paymentId, // 🔑 Use the directly inserted ID
-              change_amount: creditToAdd,
-              balance_after: newCredits,
-            },
-          ]);
-
-          if (logError) {
-            console.error("Error logging credit transaction:", logError);
-          }
-
-          // Update profile credits
-          const { error: updateCreditsError } = await supabase
-            .from("profiles")
-            .update({ credits: newCredits })
-            .eq("id", currentUserId);
-
-          if (updateCreditsError) throw updateCreditsError;
-        } catch (error) {
-          console.error("Error adding credits:", error);
-          alert("Payment succeeded, but failed to add credits.");
+        if (logError) {
+          console.error("Error logging credit transaction:", logError);
         }
 
-        // Check if all participants have paid
-        const { data: allParticipants, error: participantsError } = await supabase
-          .from("bill_participants")
-          .select("has_paid")
-          .eq("bill_id", billId);
+        // Update profile credits
+        const { error: updateCreditsError } = await supabase
+          .from("profiles")
+          .update({ credits: newCredits })
+          .eq("id", currentUserId);
 
-        if (participantsError) throw participantsError;
-
-        // If all participants have paid, update bill status to 'paid'
-        const allPaid = allParticipants?.every(p => p.has_paid) || false;
-        if (allPaid) {
-          const { error: billUpdateError } = await supabase
-            .from("bills")
-            .update({ status: "paid" })
-            .eq("id", billId);
-
-          if (billUpdateError) throw billUpdateError;
-        }
-
-        await fetchBills(currentUserId);
+        if (updateCreditsError) throw updateCreditsError;
       } catch (error) {
-        console.error("Error processing payment:", error);
-        alert("Failed to process payment. Please try again.");
+        console.error("Error adding credits:", error);
       }
-    };
+
+      // Check if all participants have paid
+      const { data: allParticipants, error: participantsError } = await supabase
+        .from("bill_participants")
+        .select("has_paid")
+        .eq("bill_id", payingBill.id);
+
+      if (participantsError) throw participantsError;
+
+      // If all participants have paid, update bill status to 'paid'
+      const allPaid = allParticipants?.every(p => p.has_paid) || false;
+      if (allPaid) {
+        const { error: billUpdateError } = await supabase
+          .from("bills")
+          .update({ status: "paid" })
+          .eq("id", payingBill.id);
+
+        if (billUpdateError) throw billUpdateError;
+      }
+
+      await fetchBills(currentUserId);
+      
+      // Close dialog and show success message
+      setIsPaymentDialogOpen(false);
+      alert(`✅ Payment of £${amountToPay.toFixed(2)} processed successfully!\nYou earned ${creditToAdd.toFixed(2)} credits!`);
+      
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      alert("Failed to process payment. Please try again.");
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
 
   const handleDetailsClick = (bill: Bill) => {
     setSelectedBill(bill);
@@ -761,7 +878,7 @@ export default function BillsPage() {
                         )
                       ) : (
                         <button
-                          onClick={(e) => handlePayClick(e, bill.id)}
+                          onClick={(e) => handlePayClick(e, bill)}
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                         >
                           Pay
@@ -1329,6 +1446,251 @@ export default function BillsPage() {
                 >
                   Send Invitations
                 </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bank Card Payment Dialog */}
+        <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold">
+                💳 Pay with Bank Card
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Bill Information */}
+              {payingBill && (
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold text-blue-900 mb-2">Bill Details</h4>
+                  <p className="text-sm text-blue-800">
+                    <span className="font-medium">Bill:</span> {payingBill.title}
+                  </p>
+                  <p className="text-sm text-blue-800">
+                    <span className="font-medium">Amount to Pay:</span>{" "}
+                    <span className="text-lg font-bold">
+                      £{payingBill.bill_participants
+                        ?.find(p => p.user_id === currentUserId)
+                        ?.amount_owed.toFixed(2)}
+                    </span>
+                  </p>
+                </div>
+              )}
+
+              {/* Card Details Form */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-gray-700">Card Details</h4>
+                
+                {/* Card Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Card Number *
+                  </label>
+                  <input
+                    type="text"
+                    value={cardDetails.accountNumber}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      // Auto-format with spaces: XXXX XXXX XXXX XXXX
+                      let formatted = '';
+                      for (let i = 0; i < value.length && i < 16; i++) {
+                        if (i > 0 && i % 4 === 0) formatted += ' ';
+                        formatted += value[i];
+                      }
+                      setCardDetails({ ...cardDetails, accountNumber: value });
+                      setCardValidation(null);
+                    }}
+                    placeholder="16-digit card number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                    maxLength={19}
+                    disabled={isProcessingPayment}
+                  />
+                </div>
+
+                {/* Card Holder Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Card Holder Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={cardDetails.cardHolderName}
+                    onChange={(e) => {
+                      setCardDetails({ ...cardDetails, cardHolderName: e.target.value });
+                      setCardValidation(null);
+                    }}
+                    placeholder="Full name as on card"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isProcessingPayment}
+                  />
+                </div>
+
+                {/* CVV and Expiry Date */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      CVV *
+                    </label>
+                    <input
+                      type="text"
+                      value={cardDetails.cvv}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        if (value.length <= 3) {
+                          setCardDetails({ ...cardDetails, cvv: value });
+                          setCardValidation(null);
+                        }
+                      }}
+                      placeholder="3 digits"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      maxLength={3}
+                      disabled={isProcessingPayment}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Expiry Date *
+                    </label>
+                    <input
+                      type="text"
+                      value={cardDetails.expiryDate}
+                      onChange={(e) => {
+                        let value = e.target.value.replace(/[^\d/]/g, '');
+                        // Auto-format to MM/YY
+                        if (value.length === 2 && !value.includes('/')) {
+                          value += '/';
+                        }
+                        if (value.length <= 5) {
+                          setCardDetails({ ...cardDetails, expiryDate: value });
+                          setCardValidation(null);
+                        }
+                      }}
+                      placeholder="MM/YY"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      maxLength={5}
+                      disabled={isProcessingPayment}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  💡 Test card: Card Number: 4532015112830366, Name: James Wilson, CVV: 366, Expiry: 12/28
+                </p>
+              </div>
+
+              {/* Validate Button */}
+              {!cardValidation && (
+                <button
+                  onClick={handleValidateCard}
+                  disabled={
+                    !cardDetails.accountNumber || 
+                    !cardDetails.cardHolderName || !cardDetails.cvv || 
+                    !cardDetails.expiryDate || isValidating
+                  }
+                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {isValidating ? "Validating..." : "Validate Card"}
+                </button>
+              )}
+
+              {/* Card Validation Result */}
+              {cardValidation && (
+                <div className={`p-4 rounded-lg border ${
+                  cardValidation.valid 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">
+                      {cardValidation.valid ? '✅' : '❌'}
+                    </span>
+                    <div className="flex-1">
+                      <p className={`font-medium ${
+                        cardValidation.valid ? 'text-green-900' : 'text-red-900'
+                      }`}>
+                        {cardValidation.message}
+                      </p>
+                      
+                      {cardValidation.valid && (
+                        <div className="mt-3 space-y-1 text-sm text-green-800">
+                          <p>
+                            <span className="font-medium">Card Number:</span>{" "}
+                            {cardValidation.maskedCardNumber}
+                          </p>
+                          <p>
+                            <span className="font-medium">Cardholder:</span>{" "}
+                            {cardValidation.cardHolderName}
+                          </p>
+                          <p>
+                            <span className="font-medium">Bank:</span>{" "}
+                            {cardValidation.bankName}
+                          </p>
+                          <p>
+                            <span className="font-medium">Available Balance:</span>{" "}
+                            <span className="text-lg font-bold">
+                              £{cardValidation.balance?.toFixed(2)}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      
+                      {!cardValidation.valid && (
+                        <button
+                          onClick={() => {
+                            setCardDetails({
+                              accountNumber: "",
+                              cardHolderName: "",
+                              cvv: "",
+                              expiryDate: ""
+                            });
+                            setCardValidation(null);
+                          }}
+                          className="mt-2 text-sm text-red-700 hover:text-red-800 font-medium"
+                        >
+                          Try again →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setIsPaymentDialogOpen(false);
+                    setCardDetails({
+                      accountNumber: "",
+                      cardHolderName: "",
+                      cvv: "",
+                      expiryDate: ""
+                    });
+                    setCardValidation(null);
+                  }}
+                  disabled={isProcessingPayment}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmPayment}
+                  disabled={!cardValidation?.valid || isProcessingPayment}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {isProcessingPayment ? "Processing..." : "Confirm Payment"}
+                </button>
+              </div>
+
+              {/* Security Notice */}
+              <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
+                <span className="text-gray-500">🔒</span>
+                <p className="text-xs text-gray-600">
+                  Your payment is processed securely. Card information is validated
+                  and balance is checked before processing.
+                </p>
               </div>
             </div>
           </DialogContent>

@@ -107,6 +107,13 @@ const fetchFriendRequests = async (userId: string, dismissedIds: string[]): Prom
 export default function InboxPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  // --- (Update badge count whenever notifications change) ---
+  useEffect(() => {
+    const unreadCount = notifications.filter(n => n.status === 'unread').length;
+    localStorage.setItem('unreadNotificationCount', unreadCount.toString());
+    window.dispatchEvent(new CustomEvent('notifications-updated', { detail: unreadCount }));
+  }, [notifications]);
+
   // --- (Realtime useEffect) ---
   useEffect(() => {
     // 1. Define the function to load all notifications
@@ -129,11 +136,6 @@ export default function InboxPage() {
         allNotifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
         setNotifications(allNotifications);
-        
-        // ✅ Update badge count in localStorage and trigger event
-        const unreadCount = allNotifications.filter(n => n.status === 'unread').length;
-        localStorage.setItem('unreadNotificationCount', unreadCount.toString());
-        window.dispatchEvent(new CustomEvent('notifications-updated', { detail: unreadCount }));
       } catch (err) {
         console.error('Error loading notifications:', err);
       }
@@ -218,18 +220,13 @@ export default function InboxPage() {
   // --- (Helper Functions) ---
 
   const markAsRead = (notificationId: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(notification => 
+    setNotifications(prev => 
+      prev.map(notification => 
         notification.id === notificationId 
           ? { ...notification, status: 'read' as const } 
           : notification
-      );
-      // ✅ Update badge count when marking as read
-      const unreadCount = updated.filter(n => n.status === 'unread').length;
-      localStorage.setItem('unreadNotificationCount', unreadCount.toString());
-      window.dispatchEvent(new CustomEvent('notifications-updated', { detail: unreadCount }));
-      return updated;
-    });
+      )
+    );
   };
 
   const persistDismiss = (notificationId: string) => {
@@ -246,14 +243,7 @@ export default function InboxPage() {
     }
     
     // Also trigger an immediate UI update
-    setNotifications(prev => {
-      const updated = prev.filter(n => n.id !== notificationId);
-      // ✅ Update badge count when dismissing
-      const unreadCount = updated.filter(n => n.status === 'unread').length;
-      localStorage.setItem('unreadNotificationCount', unreadCount.toString());
-      window.dispatchEvent(new CustomEvent('notifications-updated', { detail: unreadCount }));
-      return updated;
-    });
+    setNotifications(prev => prev.filter(n => n.id !== notificationId));
   };
 
   // --- (UI / JSX) ---
@@ -305,17 +295,15 @@ export default function InboxPage() {
                       </div>
                       
                       <div className="flex gap-2">
-                        <Link href={notification.href} passHref legacyBehavior>
-                          <Button 
-                            asChild 
-                            variant="outline" 
-                            size="sm"
-                          >
-                            <a>
-                              {notification.type === 'FRIEND_REQUEST' ? 'View in Friends' : 'View in Bills'}
-                            </a>
-                          </Button>
-                        </Link>
+                        <Button 
+                          asChild 
+                          variant="outline" 
+                          size="sm"
+                        >
+                          <Link href={notification.href}>
+                            {notification.type === 'FRIEND_REQUEST' ? 'View in Friends' : 'View in Bills'}
+                          </Link>
+                        </Button>
                         
                         <Button 
                           variant="ghost" 

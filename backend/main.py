@@ -3,8 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 
-# Import reward router
+# Import routers
 from reward import router as reward_router
+from bank_api import router as bank_router
 
 app = FastAPI(title="GUHack2025 API", version="1.0.0")
 
@@ -20,8 +21,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include reward system router
+# Include routers
 app.include_router(reward_router)
+app.include_router(bank_router)
 
 class Item(BaseModel):
     id: int
@@ -60,4 +62,4 @@ async def create_item(item: Item):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
