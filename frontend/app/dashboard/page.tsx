@@ -110,7 +110,7 @@ export default function WalletDashboard() {
 
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-white">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -211,7 +211,7 @@ export default function WalletDashboard() {
                         delay: 0.6,
                         ease: "easeOut"
                       }}
-                      className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"
+                      className="h-full bg-linear-to-r from-blue-500 to-blue-600 rounded-full"
                     />
                   </div>
                 </motion.div>
