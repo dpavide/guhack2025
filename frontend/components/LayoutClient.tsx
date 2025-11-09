@@ -71,8 +71,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {!isAuthPage && (
-        // Make nav background transparent so badges are not visually clipped by a white bar
-        <nav className="bg-transparent p-4 flex justify-between items-center sticky top-0 z-10">
+  // Make nav background transparent so badges are not visually clipped by a white bar
+  // Remove sticky so header scrolls away with the page
+  <nav className="bg-transparent p-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-indigo-600">Splitr</h1>
           {/*
             KEY CHANGE: 
