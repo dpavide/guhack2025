@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { Gift, Lock, Sparkles, Target } from "lucide-react";
 
 // Map item names to image files
 const getItemImage = (itemName: string): string | null => {
@@ -146,23 +147,43 @@ export default function RewardsPage() {
 
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mb-4"></div>
-          <p className="text-gray-600">Loading rewards...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="inline-block w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full mb-4"
+          />
+          <p className="text-gray-600 text-lg font-medium">Loading rewards...</p>
+        </motion.div>
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.6 }}
+      className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100"
+    >
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-white border-b shadow-sm">
         <div className="container mx-auto px-6 py-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+          >
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                🎁 Rewards Shop
+              <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                <Gift className="w-8 h-8 text-blue-600" />
+                Rewards Shop
               </h1>
               <p className="text-gray-600">
                 Redeem your credits for gift cards and exclusive rewards
@@ -170,24 +191,33 @@ export default function RewardsPage() {
             </div>
             
             {/* Credits Display */}
-            <div className="bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl px-6 py-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="bg-white border-2 border-blue-200 rounded-xl px-6 py-4 shadow-md"
+            >
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl font-bold text-blue-600">{credits.toFixed(0)}</span>
                 <span className="text-gray-600 font-medium">credits</span>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
       </div>
 
       {/* Rewards Grid */}
       <div className="container mx-auto px-6 py-8">
         {shopItems.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="text-6xl mb-4">🎁</div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center py-20"
+          >
+            <Gift className="w-20 h-20 text-gray-400 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-700 mb-2">No Rewards Available</h3>
-            <p className="text-gray-500">Check back soon for new rewards!</p>
-          </div>
+            <p className="text-gray-500">Check back soon for new rewards</p>
+          </motion.div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {shopItems.map((item, index) => {
@@ -202,13 +232,11 @@ export default function RewardsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                 >
-                  <Card className={`group h-full flex flex-col overflow-hidden transition-all duration-200 ${
-                    canAfford 
-                      ? 'hover:shadow-xl border-gray-200' 
-                      : 'opacity-60 border-gray-200'
-                  }`}>
+                  <Card className="group h-full flex flex-col overflow-hidden transition-all duration-200 hover:shadow-xl border-gray-200">
                     {/* Product Image */}
-                    <div className="relative w-full h-48 bg-linear-to-br from-gray-50 to-gray-100 overflow-hidden">
+                    <div className={`relative w-full h-48 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden ${
+                      !canAfford ? 'opacity-60' : ''
+                    }`}>
                       {itemImage ? (
                         <Image
                           src={itemImage}
@@ -218,17 +246,15 @@ export default function RewardsPage() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="text-6xl mb-2">🎁</div>
-                            <p className="text-sm text-gray-400 font-medium">Reward Item</p>
-                          </div>
+                          <Gift className="w-16 h-16 text-gray-400" />
                         </div>
                       )}
                       {!canAfford && (
                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                          <span className="bg-white px-4 py-2 rounded-full text-sm font-semibold text-gray-700">
-                            🔒 Locked
-                          </span>
+                          <div className="bg-white px-4 py-2 rounded-full flex items-center gap-2">
+                            <Lock className="w-4 h-4 text-gray-700" />
+                            <span className="text-sm font-semibold text-gray-700">Locked</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -266,9 +292,15 @@ export default function RewardsPage() {
                           }`}
                         >
                           {canAfford ? (
-                            '✨ Redeem Now'
+                            <span className="flex items-center justify-center gap-2">
+                              <Sparkles className="w-4 h-4" />
+                              Redeem Now
+                            </span>
                           ) : (
-                            `Need ${item.credit_cost - credits} more`
+                            <span className="flex items-center justify-center gap-2">
+                              <Lock className="w-4 h-4" />
+                              Need {item.credit_cost - credits} more
+                            </span>
                           )}
                         </Button>
 
@@ -302,7 +334,10 @@ export default function RewardsPage() {
                           }}
                           disabled={!userId}
                         >
-                          {isCurrentGoal ? '⭐ Current Goal' : '🎯 Set as Goal'}
+                          <span className="flex items-center justify-center gap-2">
+                            <Target className="w-4 h-4" />
+                            {isCurrentGoal ? 'Current Goal' : 'Set as Goal'}
+                          </span>
                         </Button>
                       </div>
                     </CardContent>
@@ -313,6 +348,6 @@ export default function RewardsPage() {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
