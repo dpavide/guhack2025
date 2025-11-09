@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react"; // ✨ NEW: Import a loading icon
+import { Loader2 } from "lucide-react";
 
 export default function WalletDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -16,14 +16,13 @@ export default function WalletDashboard() {
   const [userGoal, setUserGoal] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✨ NEW: State for Gemini analysis
+  // State for Gemini analysis
   const [insights, setInsights] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // 🔁 Fetch all user-related data
   useEffect(() => {
-    // ... (Your existing fetchData function - no changes needed)
     const fetchData = async () => {
       setLoading(true);
 
@@ -48,8 +47,7 @@ export default function WalletDashboard() {
       // 3️⃣ Fetch payments + related bills
       const { data: paymentData, error: paymentError } = await supabase
         .from("payments")
-        .select(
-          `
+        .select(`
           id,
           amount_paid,
           status,
@@ -58,10 +56,10 @@ export default function WalletDashboard() {
             id,
             title,
             amount,
-            due_date
+            due_date,
+            created_at
           )
-        `
-        )
+        `)
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -85,7 +83,8 @@ export default function WalletDashboard() {
     fetchData();
   }, []);
 
-  // ... (Your existing localStorage useEffect - no changes needed)
+  // Read front-end only goal from localStorage and listen for changes.
+  // We only use the stored goal if it matches the current profile user id (or if profile is not loaded yet we still allow it).
   useEffect(() => {
     const load = () => {
       try {
@@ -113,7 +112,7 @@ export default function WalletDashboard() {
       window.removeEventListener("goalChanged", handler as EventListener);
   }, [profile?.id]);
 
-  // ✨ NEW: Handler function to call our Next.js API route
+  // Handler function to call our Next.js API route
   const handleAnalyzeSpending = async () => {
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -156,7 +155,6 @@ export default function WalletDashboard() {
   };
 
   if (loading) {
-    // ... (Your existing loading component - no changes)
     return (
       <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-white">
         <motion.div
@@ -359,12 +357,10 @@ export default function WalletDashboard() {
               </CardHeader>
               <CardContent>
                 {payments.length === 0 ? (
-                  // ... (your existing no payments)
                   <p className="text-gray-500 text-center py-4">
                     No payments found yet 💸
                   </p>
                 ) : (
-                  // ... (your existing payments table)
                   <table className="w-full text-left text-gray-600">
                     <thead>
                       <tr className="border-b text-sm text-gray-500">
@@ -409,7 +405,7 @@ export default function WalletDashboard() {
           </TabsContent>
 
           {/* 💰 Credit History Tab */}
-          {/* ... (Your existing Credit History Tab - no changes) ... */}
+          {/* 💰 Credit History Tab */}
           <TabsContent value="credits">
             <Card className="shadow-sm">
               <CardHeader>
@@ -428,6 +424,8 @@ export default function WalletDashboard() {
                         <th>Type</th>
                         <th>Amount</th>
                         <th>Balance After</th>
+                        <th>Multiplier</th>
+                        <th>Reason</th>
                         <th>Description</th>
                       </tr>
                     </thead>
@@ -436,6 +434,49 @@ export default function WalletDashboard() {
                         const changeAmount = Number(log.change_amount || 0);
                         const isPositive = changeAmount > 0;
                         const amount = Math.abs(changeAmount);
+                        
+                        // Build a lookup for payments by id for enrichment
+                        const payment = payments.find((p) => p.id === log.source_id);
+                        const bill = payment?.bills;
+
+                        // Helper computations for multiplier and reason (front-end only)
+                        const dayMs = 1000 * 60 * 60 * 24;
+                        let multiplierDisplay: string | null = null;
+                        let reasonDisplay: string | null = null;
+
+                        if (log.source_type === "payment" && payment && bill) {
+                          const baseRate = 0.05; // must match bills page base rate
+                          const baseCredit = Math.round((payment.amount_paid * baseRate) * 100) / 100;
+                          // Multiplier only meaningful for non-negative rewards; for penalties, show x0.00
+                          if (baseCredit > 0) {
+                            if (changeAmount >= 0) {
+                              const effectiveMultiplier = changeAmount / baseCredit;
+                              multiplierDisplay = `x${effectiveMultiplier.toFixed(2)}`;
+                            } else {
+                              multiplierDisplay = `x0.00`;
+                            }
+                          } else {
+                            multiplierDisplay = "-";
+                          }
+
+                          const payDate = new Date(payment.created_at);
+                          const dueDate = new Date(bill.due_date);
+                          // Normalize to local midnight compare, but a simple day diff is enough for UI
+                          const diffDays = Math.ceil((payDate.getTime() - dueDate.getTime()) / dayMs);
+                          if (diffDays < 0) {
+                            reasonDisplay = `Early by ${Math.abs(diffDays)} day(s)`;
+                          } else if (diffDays === 0) {
+                            reasonDisplay = "On due date";
+                          } else {
+                            reasonDisplay = `Late by ${diffDays} day(s)`;
+                          }
+
+                          // If penalty occurred (negative change), append penalty amount detail
+                          if (changeAmount < 0 && baseCredit > 0) {
+                            const penalty = Math.max(0, baseCredit - changeAmount); // since changeAmount is negative
+                            reasonDisplay = `${reasonDisplay} • Penalty £${penalty.toFixed(2)}`;
+                          }
+                        }
 
                         return (
                           <motion.tr
@@ -472,6 +513,12 @@ export default function WalletDashboard() {
                             </td>
                             <td className="font-medium">
                               £{Number(log.balance_after || 0).toFixed(2)}
+                            </td>
+                            <td className="text-sm text-gray-700">
+                              {multiplierDisplay ?? (log.source_type === "payment" ? "x1.00" : "-")}
+                            </td>
+                            <td className="text-sm text-gray-600">
+                              {reasonDisplay ?? (log.source_type === "payment" ? "—" : "—")}
                             </td>
                             <td className="text-sm text-gray-600">
                               {log.source_type === "payment"
