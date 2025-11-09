@@ -356,6 +356,15 @@ export default function BillsPage() {
       return;
     }
 
+    // Validate due date is not in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDate = new Date(newBill.dueDate);
+    if (selectedDate < today) {
+      alert("⚠️ Due date cannot be in the past. Please select today or a future date.");
+      return;
+    }
+
     if (!creatorShare) {
       alert("⚠️ Please enter your share amount");
       return;
@@ -922,9 +931,13 @@ export default function BillsPage() {
                     <input
                       type="date"
                       value={newBill.dueDate}
+                      min={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setNewBill({ ...newBill, dueDate: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Due date must be today or later
+                    </p>
                   </div>
                 </div>
               </div>
