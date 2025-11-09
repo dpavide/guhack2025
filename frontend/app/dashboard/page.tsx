@@ -75,9 +75,6 @@ export default function WalletDashboard() {
 
     fetchData();
 
-    // ♻️ Optional: auto-refresh dashboard every 15 seconds
-    const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
   }, []);
 
   
