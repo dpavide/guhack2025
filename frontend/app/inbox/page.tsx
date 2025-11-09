@@ -22,6 +22,14 @@ export default function InboxPage() {
   // Load friend requests from localStorage
   useEffect(() => {
     const loadFriendRequests = async () => {
+      // load dismissed ids so dismissed notifications remain hidden
+      let dismissedIds: string[] = [];
+      try {
+        const rawDismissed = localStorage.getItem('dismissedNotifications');
+        dismissedIds = rawDismissed ? JSON.parse(rawDismissed) : [];
+      } catch (e) {
+        dismissedIds = [];
+      }
       // Prefer live data from Supabase if user is logged in
       try {
         const { data: auth } = await supabase.auth.getUser();
@@ -48,7 +56,9 @@ export default function InboxPage() {
               timestamp: r.created_at || new Date().toISOString(),
             }));
 
-            const notificationsList = requests.map((request: any) => ({
+            const notificationsList = requests
+              .filter((r: any) => !dismissedIds.includes(r.id))
+              .map((request: any) => ({
               id: request.id,
               type: 'FRIEND_REQUEST' as const,
               title: 'Friend Request',
@@ -76,7 +86,11 @@ export default function InboxPage() {
       if (storedRequests) {
         try {
           const requests = JSON.parse(storedRequests);
-          const notificationsList = requests.map((request: any) => ({
+          const rawDismissed = localStorage.getItem('dismissedNotifications');
+          const dismissed = rawDismissed ? JSON.parse(rawDismissed) : [];
+          const notificationsList = requests
+            .filter((r: any) => !dismissed.includes(r.id))
+            .map((request: any) => ({
             id: request.id,
             type: 'FRIEND_REQUEST' as const,
             title: 'Friend Request',
@@ -110,17 +124,25 @@ export default function InboxPage() {
     const handleFriendRequestsUpdate = (e: any) => {
       const requests = e?.detail;
       if (Array.isArray(requests)) {
-        const notificationsList = requests.map((request: any) => ({
-          id: request.id,
-          type: 'FRIEND_REQUEST' as const,
-          title: 'Friend Request',
-          description: `${request.senderName} wants to be your friend`,
-          status: 'unread' as const,
-          timestamp: request.timestamp,
-          senderId: request.senderId,
-          senderName: request.senderName
-        }));
-        setNotifications(notificationsList);
+        try {
+          const raw = localStorage.getItem('dismissedNotifications');
+          const dismissed = raw ? JSON.parse(raw) : [];
+          const notificationsList = requests
+            .filter((r: any) => !dismissed.includes(r.id))
+            .map((request: any) => ({
+              id: request.id,
+              type: 'FRIEND_REQUEST' as const,
+              title: 'Friend Request',
+              description: `${request.senderName} wants to be your friend`,
+              status: 'unread' as const,
+              timestamp: request.timestamp,
+              senderId: request.user_id || request.senderId,
+              senderName: request.senderName
+            }));
+          setNotifications(notificationsList);
+        } catch (e) {
+          console.error(e);
+        }
       }
     };
 
@@ -140,6 +162,22 @@ export default function InboxPage() {
         ? { ...notification, status: 'read' } 
         : notification
     ));
+  };
+
+  // Persist a dismissal without removing the underlying friend request
+  const persistDismiss = (notificationId: string) => {
+    try {
+      const raw = localStorage.getItem('dismissedNotifications');
+      const arr: string[] = raw ? JSON.parse(raw) : [];
+      if (!arr.includes(notificationId)) {
+        arr.push(notificationId);
+        localStorage.setItem('dismissedNotifications', JSON.stringify(arr));
+      }
+      // notify other tabs/components that dismissed list changed
+      window.dispatchEvent(new CustomEvent('dismissedNotificationsUpdated', { detail: arr }));
+    } catch (e) {
+      console.error('Failed to persist dismissed notification', e);
+    }
   };
 
   return (
@@ -204,7 +242,11 @@ export default function InboxPage() {
                               variant="ghost" 
                               size="sm"
                               className="text-red-500 hover:text-red-600"
-                              onClick={() => markAsRead(notification.id)}
+                              onClick={() => {
+                                // persist dismissal and remove from UI; do not delete friendRequests
+                                persistDismiss(notification.id);
+                                setNotifications(prev => prev.filter(n => n.id !== notification.id));
+                              }}
                             >
                               Dismiss
                             </Button>

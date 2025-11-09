@@ -33,7 +33,12 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         const raw = localStorage.getItem("friendRequests");
         if (!raw) return setFriendRequestCount(0);
         const parsed = JSON.parse(raw);
-        setFriendRequestCount(Array.isArray(parsed) ? parsed.length : 0);
+        // exclude dismissed notifications so badge doesn't count dismissed ones
+        const rawDismissed = localStorage.getItem('dismissedNotifications');
+        const dismissed: string[] = rawDismissed ? JSON.parse(rawDismissed) : [];
+        const arr = Array.isArray(parsed) ? parsed : [];
+        const visible = arr.filter((r: any) => !dismissed.includes(r.id));
+        setFriendRequestCount(visible.length);
       } catch (e) {
         console.error("Failed to read friendRequests from localStorage", e);
         setFriendRequestCount(0);
@@ -43,21 +48,31 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     loadCount();
 
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "friendRequests") loadCount();
+      if (e.key === "friendRequests" || e.key === 'dismissedNotifications') loadCount();
     };
 
     const onCustom = (ev: any) => {
       const detail = ev?.detail;
-      if (Array.isArray(detail)) setFriendRequestCount(detail.length);
-      else loadCount();
+      try {
+        const rawDismissed = localStorage.getItem('dismissedNotifications');
+        const dismissed: string[] = rawDismissed ? JSON.parse(rawDismissed) : [];
+        if (Array.isArray(detail)) {
+          const visible = detail.filter((r: any) => !dismissed.includes(r.id));
+          setFriendRequestCount(visible.length);
+        } else loadCount();
+      } catch (e) {
+        loadCount();
+      }
     };
 
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("friendRequestsUpdated", onCustom as EventListener);
+  window.addEventListener("storage", onStorage);
+  window.addEventListener("friendRequestsUpdated", onCustom as EventListener);
+  window.addEventListener('dismissedNotificationsUpdated', onStorage as EventListener);
 
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("friendRequestsUpdated", onCustom as EventListener);
+      window.removeEventListener('dismissedNotificationsUpdated', onStorage as EventListener);
     };
   }, []);
 
