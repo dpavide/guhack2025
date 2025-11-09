@@ -281,23 +281,26 @@ export default function BillsPage() {
     
     // If paid before or on due date
     if (paidTime <= dueTime) {
-      // Special case: if due today but not created today, use 1.0
-      if (paidTime === dueTime && createdTime === dueTime) {
-        return 1.0;
+      const daysBeforeDue = Math.round((dueTime - paidTime) / (24 * 60 * 60 * 1000));
+      
+      // If paid on the same day the bill was created (immediate payment)
+      if (paidTime === createdTime) {
+        return 1.5;
       }
       
-      const totalWindow = dueTime - createdTime;
-      
-      // If created and due are the same day, use 1.0 multiplier
-      if (totalWindow === 0) {
-        return 1.0;
+      // If paid 4+ days before due date, give max multiplier
+      if (daysBeforeDue >= 4) {
+        return 1.5;
       }
       
-      const timeElapsed = paidTime - createdTime;
-      const ratio = timeElapsed / totalWindow;
-      
-      // Linear scale from 1.0 (at creation) to 1.5 (at due date)
-      return 1.0 + (ratio * 0.5);
+      // Gradually scale from 1.0 to 1.5 based on days before due
+      // 0 days early (on due date) = 1.5x
+      // 1 day early = 1.375x
+      // 2 days early = 1.25x
+      // 3 days early = 1.125x
+      // 4+ days early = 1.5x
+      const multiplier = 1.0 + (daysBeforeDue / 4) * 0.5;
+      return Math.min(1.5, multiplier);
     }
     
     // If paid late (after due date)
@@ -600,8 +603,6 @@ export default function BillsPage() {
       
       // Close dialog and show success message
       setIsPaymentDialogOpen(false);
-      alert(`✅ Payment of £${amountToPay.toFixed(2)} processed successfully!\nYou earned ${creditToAdd.toFixed(2)} credits!`);
-      
     } catch (error) {
       console.error("Error processing payment:", error);
       alert("Failed to process payment. Please try again.");
