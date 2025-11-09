@@ -193,7 +193,6 @@ export default function WalletDashboard() {
       <Tabs defaultValue="history">
         <TabsList className="mb-4">
           <TabsTrigger value="history">Payment History</TabsTrigger>
-          <TabsTrigger value="redeem">Redeem Credits</TabsTrigger>
         </TabsList>
 
         {/* 💳 Payment History Tab */}
@@ -243,34 +242,6 @@ export default function WalletDashboard() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* 🎁 Redeem Credits Tab */}
-        <TabsContent value="redeem">
-          {redemptions.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No redemptions yet 🎉</p>
-          ) : (
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {redemptions.map((r) => (
-                <motion.div
-                  key={r.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.05 }}
-                >
-                  <Card className="hover:shadow-lg transition-shadow border-blue-100">
-                    <CardHeader>
-                      <CardTitle className="text-lg">{r.redemption_type}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-gray-500 mb-2">{r.description}</p>
-                      <p className="font-semibold">Cost: £{r.amount}</p>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-          )}
         </TabsContent>
       </Tabs>
     </motion.div>

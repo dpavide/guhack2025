@@ -12,7 +12,8 @@ type Profile = {
   id: string;
   email: string | null;
   username?: string | null;
-  full_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   avatar_url?: string | null;
   bio?: string | null;
   created_at?: string | null;
@@ -48,7 +49,8 @@ export default function ProfilePage() {
       id: user.id,
       email: user.email ?? null,
       username: data?.username ?? null,
-      full_name: data?.full_name ?? null,
+      first_name: data?.first_name ?? null,
+      last_name: data?.last_name ?? null,
       avatar_url: data?.avatar_url ?? null,
       bio: data?.bio ?? null,
       created_at: user.created_at ?? null,
@@ -141,6 +143,8 @@ export default function ProfilePage() {
     );
   }
 
+  const displayName = `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() || "Unnamed User";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
       <div className="max-w-4xl mx-auto">
@@ -161,7 +165,7 @@ export default function ProfilePage() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900 text-white text-3xl font-bold rounded-full">
-                      {(profile.full_name || profile.username || "?")[0].toUpperCase()}
+                      {(profile.first_name || profile.username || "?")[0].toUpperCase()}
                     </div>
                   )}
                 </div>
@@ -187,9 +191,8 @@ export default function ProfilePage() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                    {profile.full_name || "Unnamed User"}
+                    {displayName}
                   </h1>
-                  {/* 👇 Replace email with username */}
                   <p className="text-gray-600 text-sm">@{profile.username ?? "unknown"}</p>
                 </div>
 
@@ -275,8 +278,12 @@ export default function ProfilePage() {
               <span className="text-gray-900 text-sm">@{profile.username ?? "unknown"}</span>
             </div>
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
-              <span className="text-gray-600 text-sm font-medium">Full Name</span>
-              <span className="text-gray-900 text-sm">{profile.full_name ?? "—"}</span>
+              <span className="text-gray-600 text-sm font-medium">First Name</span>
+              <span className="text-gray-900 text-sm">{profile.first_name ?? "—"}</span>
+            </div>
+            <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
+              <span className="text-gray-600 text-sm font-medium">Last Name</span>
+              <span className="text-gray-900 text-sm">{profile.last_name ?? "—"}</span>
             </div>
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">Email</span>
