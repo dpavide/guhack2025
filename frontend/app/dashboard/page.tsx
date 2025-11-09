@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
 
 export default function WalletDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -12,6 +13,11 @@ export default function WalletDashboard() {
   const [creditHistory, setCreditHistory] = useState<any[]>([]);
   const [userGoal, setUserGoal] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // State for Gemini analysis
+  const [insights, setInsights] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // 🔁 Fetch all user-related data
   useEffect(() => {
@@ -48,7 +54,8 @@ export default function WalletDashboard() {
             id,
             title,
             amount,
-            due_date
+            due_date,
+            created_at
           )
         `)
         .eq("user_id", userId)
@@ -72,13 +79,7 @@ export default function WalletDashboard() {
     };
 
     fetchData();
-
-    // ♻️ Optional: auto-refresh dashboard every 15 seconds
-    const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
   }, []);
-
-  
 
   // Read front-end only goal from localStorage and listen for changes.
   // We only use the stored goal if it matches the current profile user id (or if profile is not loaded yet we still allow it).
@@ -105,10 +106,53 @@ export default function WalletDashboard() {
     };
 
     window.addEventListener("goalChanged", handler as EventListener);
-    return () => window.removeEventListener("goalChanged", handler as EventListener);
+    return () =>
+      window.removeEventListener("goalChanged", handler as EventListener);
   }, [profile?.id]);
 
-  if (loading)
+  // Handler function to call our Next.js API route
+  const handleAnalyzeSpending = async () => {
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setInsights(null);
+
+    // Prepare the data for the AI. We already have it in state!
+    const spendingData = payments
+      .filter((p) => p.status === "success") // Only analyze successful payments
+      .map((p) => ({
+        amount: p.amount_paid,
+        category: p.bills?.title || "Uncategorized", // Use bill title as category
+        date: p.created_at,
+      }));
+
+    if (spendingData.length === 0) {
+      setAnalysisError("You have no successful payments to analyze yet.");
+      setIsAnalyzing(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactions: spendingData }), // Send the data
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to fetch insights");
+      }
+
+      const data = await response.json();
+      setInsights(data);
+    } catch (err: any) {
+      setAnalysisError(err.message);
+    }
+
+    setIsAnalyzing(false);
+  };
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-white">
         <motion.div
@@ -133,9 +177,10 @@ export default function WalletDashboard() {
         </motion.div>
       </div>
     );
+  }
 
   const currentCredits = profile?.credits || 0;
-  const targetProgress = userGoal 
+  const targetProgress = userGoal
     ? Math.min(100, (currentCredits / userGoal.credit_goal) * 100)
     : Math.min(100, currentCredits);
 
