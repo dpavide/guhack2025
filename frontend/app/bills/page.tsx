@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabaseClient";
+import Image from "next/image";
 
 interface Profile {
   id: string;
@@ -747,14 +748,37 @@ export default function BillsPage() {
                       {bill.bill_participants?.map((participant) => (
                         <div
                           key={participant.id}
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold border-2 border-white ${
-                            participant.has_paid
-                              ? "bg-green-500"
-                              : "bg-gray-400"
-                          }`}
+                          className="relative w-10 h-10 rounded-full border-2 border-white overflow-hidden"
                           title={getUserDisplayName(participant.profile)}
                         >
-                          {getInitials(participant.profile)}
+                          {participant.profile.avatar_url ? (
+                            <Image
+                              src={participant.profile.avatar_url}
+                              alt={getUserDisplayName(participant.profile)}
+                              fill
+                              className={`object-cover rounded-full ${
+                                participant.has_paid ? '' : 'opacity-60'
+                              }`}
+                            />
+                          ) : (
+                            <div
+                              className={`w-full h-full flex items-center justify-center text-white font-semibold ${
+                                participant.has_paid
+                                  ? "bg-green-500"
+                                  : "bg-gray-400"
+                              }`}
+                            >
+                              {getInitials(participant.profile)}
+                            </div>
+                          )}
+                          {/* Paid Checkmark Overlay */}
+                          {participant.has_paid && (
+                            <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center">
+                              <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs font-bold">✓</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -861,8 +885,19 @@ export default function BillsPage() {
                           key={participant.id}
                           className="flex items-center space-x-3 p-2 bg-green-50 rounded-lg"
                         >
-                          <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-white font-semibold">
-                            {getInitials(participant.profile)}
+                          <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-green-500">
+                            {participant.profile.avatar_url ? (
+                              <Image
+                                src={participant.profile.avatar_url}
+                                alt={getUserDisplayName(participant.profile)}
+                                fill
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-green-500 flex items-center justify-center text-white font-semibold">
+                                {getInitials(participant.profile)}
+                              </div>
+                            )}
                           </div>
                           <div className="flex-1">
                             <span className="font-medium text-gray-800">
@@ -890,8 +925,19 @@ export default function BillsPage() {
                           key={participant.id}
                           className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg"
                         >
-                          <div className="w-10 h-10 rounded-full bg-gray-400 flex items-center justify-center text-white font-semibold">
-                            {getInitials(participant.profile)}
+                          <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-gray-300">
+                            {participant.profile.avatar_url ? (
+                              <Image
+                                src={participant.profile.avatar_url}
+                                alt={getUserDisplayName(participant.profile)}
+                                fill
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gray-400 flex items-center justify-center text-white font-semibold">
+                                {getInitials(participant.profile)}
+                              </div>
+                            )}
                           </div>
                           <div className="flex-1">
                             <span className="font-medium text-gray-800">
@@ -1189,8 +1235,19 @@ export default function BillsPage() {
                           className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
                           data-participant-id={participant.user_id}
                         />
-                        <div className="w-10 h-10 rounded-full bg-gray-400 flex items-center justify-center text-white font-semibold">
-                          {getInitials(participant.profile)}
+                        <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-gray-300">
+                          {participant.profile.avatar_url ? (
+                            <Image
+                              src={participant.profile.avatar_url}
+                              alt={getUserDisplayName(participant.profile)}
+                              fill
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gray-400 flex items-center justify-center text-white font-semibold">
+                              {getInitials(participant.profile)}
+                            </div>
+                          )}
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-gray-800">
