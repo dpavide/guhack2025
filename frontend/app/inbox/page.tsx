@@ -1,37 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 interface Notification {
   id: string;
-  type: 'SPLIT_PAYMENT';
+  type: 'SPLIT_PAYMENT' | 'FRIEND_REQUEST';
   title: string;
   description: string;
   status: 'unread' | 'read';
   timestamp: string;
+  senderId?: string;
+  senderName?: string;
 }
 
 export default function InboxPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'SPLIT_PAYMENT',
-      title: 'Split Payment Invitation',
-      description: 'Alex invited you to split £30 for dinner',
-      status: 'unread',
-      timestamp: new Date().toISOString(),
-    },
-    {
-      id: '2',
-      type: 'SPLIT_PAYMENT',
-      title: 'Split Payment Invitation',
-      description: 'Sarah invited you to split £50 for movie tickets',
-      status: 'read',
-      timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-    },
-  ]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Load friend requests from localStorage
+  useEffect(() => {
+    const loadFriendRequests = () => {
+      const storedRequests = localStorage.getItem('friendRequests');
+      if (storedRequests) {
+        try {
+          const requests = JSON.parse(storedRequests);
+          const notificationsList = requests.map((request: any) => ({
+            id: request.id,
+            type: 'FRIEND_REQUEST',
+            title: 'Friend Request',
+            description: `${request.senderName} wants to be your friend`,
+            status: 'unread',
+            timestamp: request.timestamp || new Date().toISOString(),
+            senderId: request.senderId,
+            senderName: request.senderName
+          }));
+          setNotifications(notificationsList);
+        } catch (err) {
+          console.error('Error parsing friend requests:', err);
+        }
+      }
+    };
+
+    loadFriendRequests();
+
+    // Listen for changes in friend requests
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'friendRequests') {
+        loadFriendRequests();
+      }
+    };
+
+    const handleFriendRequestsUpdate = (e: CustomEvent) => {
+      const requests = e.detail;
+      if (Array.isArray(requests)) {
+        const notificationsList = requests.map(request => ({
+          id: request.id,
+          type: 'FRIEND_REQUEST' as const,
+          title: 'Friend Request',
+          description: `${request.senderName} wants to be your friend`,
+          status: 'unread' as const,
+          timestamp: request.timestamp,
+          senderId: request.senderId,
+          senderName: request.senderName
+        }));
+        setNotifications(notificationsList);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('friendRequestsUpdated', handleFriendRequestsUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('friendRequestsUpdated', handleFriendRequestsUpdate as EventListener);
+    };
+  }, []);
 
   const markAsRead = (notificationId: string) => {
     setNotifications(notifications.map(notification => 
@@ -87,21 +131,46 @@ export default function InboxPage() {
                         </p>
                       </div>
                       <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => markAsRead(notification.id)}
-                        >
-                          Accept
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-red-500 hover:text-red-600"
-                          onClick={() => markAsRead(notification.id)}
-                        >
-                          Decline
-                        </Button>
+                        {notification.type === 'FRIEND_REQUEST' ? (
+                          <>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                markAsRead(notification.id);
+                                window.location.href = '/friends';
+                              }}
+                            >
+                              View in Friends
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-red-500 hover:text-red-600"
+                              onClick={() => markAsRead(notification.id)}
+                            >
+                              Dismiss
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => markAsRead(notification.id)}
+                            >
+                              Accept
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-red-500 hover:text-red-600"
+                              onClick={() => markAsRead(notification.id)}
+                            >
+                              Decline
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </CardContent>

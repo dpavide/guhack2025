@@ -79,6 +79,20 @@ export default function FriendsPage() {
     }));
 
     setPendingRequests(normalized);
+
+    // Sync to localStorage for inbox notifications
+    const friendRequests = normalized.map(req => ({
+      id: req.id,
+      senderId: req.user_id,
+      senderName: req.profiles.username,
+      timestamp: new Date().toISOString()
+    }));
+    localStorage.setItem('friendRequests', JSON.stringify(friendRequests));
+    
+    // Dispatch event to notify inbox
+    window.dispatchEvent(new CustomEvent('friendRequestsUpdated', {
+      detail: friendRequests
+    }));
   };
 
   // Fetch sent requests
@@ -128,6 +142,15 @@ export default function FriendsPage() {
     await supabase.from("friends").insert([
       { user_id: user.id, friend_id: senderId, status: "accepted" },
     ]);
+    
+    // Update localStorage and notify inbox
+    const storedRequests = JSON.parse(localStorage.getItem('friendRequests') || '[]');
+    const updatedRequests = storedRequests.filter((req: any) => req.id !== id);
+    localStorage.setItem('friendRequests', JSON.stringify(updatedRequests));
+    window.dispatchEvent(new CustomEvent('friendRequestsUpdated', {
+      detail: updatedRequests
+    }));
+
     fetchPendingRequests();
     fetchFriends();
   };
@@ -135,6 +158,15 @@ export default function FriendsPage() {
   // Decline friend request
   const declineRequest = async (id: string) => {
     await supabase.from("friends").delete().eq("id", id);
+    
+    // Update localStorage and notify inbox
+    const storedRequests = JSON.parse(localStorage.getItem('friendRequests') || '[]');
+    const updatedRequests = storedRequests.filter((req: any) => req.id !== id);
+    localStorage.setItem('friendRequests', JSON.stringify(updatedRequests));
+    window.dispatchEvent(new CustomEvent('friendRequestsUpdated', {
+      detail: updatedRequests
+    }));
+
     fetchPendingRequests();
   };
 
