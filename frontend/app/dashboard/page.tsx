@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
 
@@ -13,11 +15,12 @@ export default function WalletDashboard() {
   const [userGoal, setUserGoal] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 🔁 Fetch all user-related data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
 
-      // Get authenticated user
+      // 1️⃣ Get authenticated user
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user) {
         window.location.href = "/login";
@@ -26,7 +29,7 @@ export default function WalletDashboard() {
 
       const userId = authData.user.id;
 
-      // Fetch profile
+      // 2️⃣ Fetch user profile (includes credits)
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("*")
@@ -35,7 +38,7 @@ export default function WalletDashboard() {
 
       if (profileError) console.error("Profile error:", profileError);
 
-      // Fetch payments
+      // 3️⃣ Fetch payments + related bills
       const { data: paymentData, error: paymentError } = await supabase
         .from("payments")
         .select(`
@@ -55,27 +58,20 @@ export default function WalletDashboard() {
 
       if (paymentError) console.error("Payments error:", paymentError);
 
-      // Fetch redemptions
-      const { data: redemptionData, error: redemptionError } = await supabase
-        .from("redemptions")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
-
-      if (redemptionError) console.error("Redemptions error:", redemptionError);
-
       setProfile(profileData);
       setPayments(paymentData || []);
-      setRedemptions(redemptionData || []);
       setLoading(false);
     };
 
     fetchData();
+
+    // ♻️ Optional: auto-refresh dashboard every 15 seconds
     const interval = setInterval(fetchData, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  // Handle localStorage goal
+  // Read front-end only goal from localStorage and listen for changes.
+  // We only use the stored goal if it matches the current profile user id (or if profile is not loaded yet we still allow it).
   useEffect(() => {
     const load = () => {
       try {
@@ -91,99 +87,57 @@ export default function WalletDashboard() {
     };
 
     load();
+
     const handler = (ev: any) => {
       const detail = ev?.detail ?? null;
       if (!detail) return;
       if (!profile?.id || detail.user_id === profile.id) setUserGoal(detail);
     };
+
     window.addEventListener("goalChanged", handler as EventListener);
     return () => window.removeEventListener("goalChanged", handler as EventListener);
   }, [profile?.id]);
 
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-white">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="text-center"
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="inline-block w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full mb-4"
-          />
-          <p className="text-gray-600 text-lg font-medium">Loading your dashboard...</p>
-        </motion.div>
+      <div className="p-10 text-center text-gray-500">
+        Loading dashboard...
       </div>
     );
 
   const currentCredits = profile?.credits || 0;
-  const targetProgress = userGoal
-    ? Math.min(100, (currentCredits / userGoal.credit_goal) * 100)
-    : Math.min(100, currentCredits);
-
-  // 🧠 Combine first and last name, or fallback
-  const displayName =
-    profile?.first_name || profile?.last_name
-      ? `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim()
-      : profile?.username || "User";
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.6 }}
-      className="min-h-screen bg-linear-to-b from-blue-50 to-white p-8"
-    >
+    <div className="min-h-screen bg-linear-to-b from-blue-50 to-white p-8">
       {/* 👋 Header */}
       <Card className="mb-8 shadow-lg bg-white/70 backdrop-blur-md border-blue-100">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold flex justify-between items-center">
-            <motion.span
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-            >
-              Welcome back, {displayName} 👋
-            </motion.span>
+            <span>Welcome back, {profile?.full_name || "User"} 👋</span>
+            
+              
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex justify-between items-center">
             <div>
               <p className="text-sm text-gray-500">Current Credit Balance</p>
-              <motion.h2
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-                className="text-4xl font-bold text-blue-600"
-              >
+              <h2 className="text-4xl font-bold text-blue-600">
                 £{currentCredits.toFixed(2)}
-              </motion.h2>
+              </h2>
               {userGoal ? (
                 <p className="text-sm text-gray-400 mt-1">
-                  🎯 {Math.min(100, Math.round((currentCredits / userGoal.credit_goal) * 100))}% towards{" "}
-                  {userGoal.item_name}
+                  🎯 {Math.min(100, Math.round((currentCredits / userGoal.credit_goal) * 100))}% towards {userGoal.item_name}
                 </p>
               ) : (
                 <p className="text-sm text-gray-400 mt-1">🎯 Visit rewards to set a goal</p>
               )}
             </div>
             <div className="w-1/3">
-              <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${targetProgress}%` }}
-                  transition={{
-                    duration: 1.5,
-                    delay: 0.6,
-                    ease: "easeOut",
-                  }}
-                  className="h-full bg-linear-to-r from-blue-500 to-blue-600 rounded-full"
-                />
-              </div>
+              <Progress
+                value={userGoal ? Math.min(100, (currentCredits / userGoal.credit_goal) * 100) : Math.min(100, currentCredits)}
+                className="h-3"
+              />
             </div>
           </div>
         </CardContent>
@@ -193,6 +147,7 @@ export default function WalletDashboard() {
       <Tabs defaultValue="history">
         <TabsList className="mb-4">
           <TabsTrigger value="history">Payment History</TabsTrigger>
+          <TabsTrigger value="redeem">Redeem Credits</TabsTrigger>
         </TabsList>
 
         {/* 💳 Payment History Tab */}
@@ -203,7 +158,9 @@ export default function WalletDashboard() {
             </CardHeader>
             <CardContent>
               {payments.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No payments found yet 💸</p>
+                <p className="text-gray-500 text-center py-4">
+                  No payments found yet 💸
+                </p>
               ) : (
                 <table className="w-full text-left text-gray-600">
                   <thead>
@@ -229,7 +186,9 @@ export default function WalletDashboard() {
                         <td>
                           <span
                             className={`font-medium ${
-                              p.status === "success" ? "text-green-500" : "text-red-500"
+                              p.status === "success"
+                                ? "text-green-500"
+                                : "text-red-500"
                             }`}
                           >
                             {p.status}
@@ -243,7 +202,37 @@ export default function WalletDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* 🎁 Redeem Credits Tab */}
+        <TabsContent value="redeem">
+          {redemptions.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">
+              No redemptions yet 🎉
+            </p>
+          ) : (
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {redemptions.map((r) => (
+                <motion.div
+                  key={r.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.05 }}
+                >
+                  <Card className="hover:shadow-lg transition-shadow border-blue-100">
+                    <CardHeader>
+                      <CardTitle className="text-lg">{r.redemption_type}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-500 mb-2">{r.description}</p>
+                      <p className="font-semibold">Cost: £{r.amount}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
-    </motion.div>
+    </div>
   );
 }
