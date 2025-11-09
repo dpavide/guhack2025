@@ -259,6 +259,55 @@ export default function BillsPage() {
     return bill.user_id === currentUserId;
   };
 
+  // Calculate timing multiplier based on when payment is made
+  const calculateTimingMultiplier = (createdAt: string, dueDate: string, paymentDate: Date): number => {
+    const created = new Date(createdAt);
+    const due = new Date(dueDate);
+    const paid = new Date(paymentDate);
+    
+    // Normalize to midnight for accurate day comparison
+    created.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    paid.setHours(0, 0, 0, 0);
+    
+    const createdTime = created.getTime();
+    const dueTime = due.getTime();
+    const paidTime = paid.getTime();
+    
+    // If bill is due today and paid today
+    if (paidTime === dueTime) {
+      return 1.5;
+    }
+    
+    // If paid before or on due date
+    if (paidTime <= dueTime) {
+      // Special case: if due today but not created today, use 1.0
+      if (paidTime === dueTime && createdTime === dueTime) {
+        return 1.0;
+      }
+      
+      const totalWindow = dueTime - createdTime;
+      
+      // If created and due are the same day, use 1.0 multiplier
+      if (totalWindow === 0) {
+        return 1.0;
+      }
+      
+      const timeElapsed = paidTime - createdTime;
+      const ratio = timeElapsed / totalWindow;
+      
+      // Linear scale from 1.0 (at creation) to 1.5 (at due date)
+      return 1.0 + (ratio * 0.5);
+    }
+    
+    // If paid late (after due date)
+    const daysLate = Math.round((paidTime - dueTime) / (24 * 60 * 60 * 1000));
+    
+    // For late payments: still get base credit (1.0x) but subtract 2 credits per day late
+    // Return 1.0 as base multiplier - penalty will be handled separately
+    return 1.0;
+  };
+
   const handlePayClick = async (e: React.MouseEvent, bill: Bill) => {
     e.stopPropagation();
     if (!currentUserId) return;
@@ -397,11 +446,99 @@ export default function BillsPage() {
       if (paymentError) throw paymentError;
       
       const paymentId = insertedPayment.id;
+      const paymentDate = new Date();
       
-      // Add 5% of payment as credits to profile
-      creditToAdd = participant.amount_owed * 0.05;
+      // Calculate timing multiplier based on payment timing
+      const timingMultiplier = calculateTimingMultiplier(
+        payingBill.created_at,
+        payingBill.due_date,
+        paymentDate
+      );
+      
+      // Base credit is 5% of payment amount
+      const baseCredit = participant.amount_owed * 0.05;
+      
+      // Apply timing multiplier for early/on-time payments
+      let creditReward = Math.round(baseCredit * timingMultiplier * 100) / 100;
+      
+      // Check if payment is late and apply penalty
+      const due = new Date(payingBill.due_date);
+      const paid = new Date(paymentDate);
+      due.setHours(0, 0, 0, 0);
+      paid.setHours(0, 0, 0, 0);
+      
+      const daysLate = Math.round((paid.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
+      
+      if (daysLate > 0) {
+        // For late payments: give base cashback but also subtract penalty
+        const latePenalty = daysLate * 2;
+        
+        // First, add the base cashback reward
+        creditToAdd = creditReward;
+        
+        try {
+          // Get current credits
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("credits")
+            .eq("id", currentUserId)
+            .single();
 
-      try {
+          if (profileError) throw profileError;
+
+          let currentCredits = profile?.credits || 0;
+          
+          // Add the cashback reward
+          currentCredits += creditReward;
+
+          // Log the cashback reward
+          const { error: rewardLogError } = await supabase.from("credit_log").insert([
+            {
+              user_id: currentUserId,
+              source_type: "payment",
+              source_id: paymentId,
+              change_amount: creditReward,
+              balance_after: currentCredits,
+            },
+          ]);
+
+          if (rewardLogError) {
+            console.error("Error logging credit reward:", rewardLogError);
+          }
+          
+          // Now subtract the late penalty
+          currentCredits -= latePenalty;
+
+          // Log the late penalty as a separate transaction
+          const { error: penaltyLogError } = await supabase.from("credit_log").insert([
+            {
+              user_id: currentUserId,
+              source_type: "late_penalty",
+              source_id: paymentId,
+              change_amount: -latePenalty,
+              balance_after: currentCredits,
+            },
+          ]);
+
+          if (penaltyLogError) {
+            console.error("Error logging late penalty:", penaltyLogError);
+          }
+
+          // Update profile credits with final amount
+          const { error: updateCreditsError } = await supabase
+            .from("profiles")
+            .update({ credits: currentCredits })
+            .eq("id", currentUserId);
+
+          if (updateCreditsError) throw updateCreditsError;
+        } catch (error) {
+          console.error("Error processing credits and penalty:", error);
+        }
+      } else {
+        // Not late - just add the reward
+        creditToAdd = creditReward;
+
+        try {
         // Get current credits
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
@@ -435,8 +572,9 @@ export default function BillsPage() {
           .eq("id", currentUserId);
 
         if (updateCreditsError) throw updateCreditsError;
-      } catch (error) {
-        console.error("Error adding credits:", error);
+        } catch (error) {
+          console.error("Error adding credits:", error);
+        }
       }
 
       // Check if all participants have paid
@@ -684,6 +822,40 @@ export default function BillsPage() {
     return true; // all
   });
 
+  // 排序规则：
+  // 1) 我没付 (userPaid=false)
+  // 2) 我付了但别人没付 (userPaid=true 且 !fullyPaid)
+  // 3) 全部付清 (fullyPaid)
+  // 同组内按到期日升序
+  const sortedBills = [...filteredBills].sort((a, b) => {
+    const aPaidCount = getPaidCount(a);
+    const aTotal = getTotalPeople(a);
+    const aFullyPaid = a.status === 'paid' || aPaidCount === aTotal;
+    const bPaidCount = getPaidCount(b);
+    const bTotal = getTotalPeople(b);
+    const bFullyPaid = b.status === 'paid' || bPaidCount === bTotal;
+
+    const aUserPaid = hasUserPaid(a);
+    const bUserPaid = hasUserPaid(b);
+
+    // 计算优先级数值，数值越小越靠前
+    const priority = (bill: Bill, fullyPaid: boolean, userPaid: boolean) => {
+      if (fullyPaid) return 3; // 全部付清最后
+      if (!userPaid) return 1; // 我没付最前
+      return 2; // 我付了但别人没付居中
+    };
+
+    const aPriority = priority(a, aFullyPaid, aUserPaid);
+    const bPriority = priority(b, bFullyPaid, bUserPaid);
+
+    if (aPriority !== bPriority) return aPriority - bPriority;
+
+    // 同组内按 due_date 升序
+    const aDue = new Date(a.due_date).getTime();
+    const bDue = new Date(b.due_date).getTime();
+    return aDue - bDue;
+  });
+
   const handleInviteClick = (e: React.MouseEvent, bill: Bill) => {
     e.stopPropagation();
     setInvitingBill(bill);
@@ -767,7 +939,7 @@ export default function BillsPage() {
 
         {/* Bills List */}
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {filteredBills.length === 0 ? (
+          {sortedBills.length === 0 ? (
             <Card className="md:col-span-2 lg:col-span-3 border-dashed border-2">
               <CardContent className="py-14 flex flex-col items-center justify-center text-center">
                 <div className="mb-3 text-5xl">📋</div>
@@ -781,15 +953,21 @@ export default function BillsPage() {
               </CardContent>
             </Card>
           ) : (
-            filteredBills.map((bill) => {
+            sortedBills.map((bill) => {
               const paidCount = getPaidCount(bill);
               const totalPeople = getTotalPeople(bill);
               const isFullyPaid = bill.status === 'paid' || paidCount === totalPeople;
               const userPaid = hasUserPaid(bill);
+              // Overdue = past due date and not fully paid
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const dueDateObj = new Date(bill.due_date);
+              dueDateObj.setHours(0, 0, 0, 0);
+              const isOverdue = dueDateObj < today && !isFullyPaid;
               return (
                 <Card
                   key={bill.id}
-                  className="group relative overflow-hidden border shadow-sm hover:shadow-md transition cursor-pointer"
+                  className={`group relative overflow-hidden border shadow-sm hover:shadow-md transition cursor-pointer ${isOverdue ? 'border-red-500 ring-2 ring-red-300' : ''}`}
                   onClick={() => handleDetailsClick(bill)}
                 >
                   <CardHeader className="pb-3">
@@ -798,6 +976,9 @@ export default function BillsPage() {
                       <span className="flex gap-1">
                         {bill.category && (
                           <span className="px-2 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-medium capitalize border border-indigo-100">{bill.category}</span>
+                        )}
+                        {isOverdue && (
+                          <span className="px-2 py-1 rounded-full bg-red-50 text-red-600 text-[11px] font-semibold border border-red-200">Overdue</span>
                         )}
                         {isFullyPaid && (
                           <span className="px-2 py-1 rounded-full bg-green-50 text-green-600 text-[11px] font-semibold border border-green-200">Paid</span>
@@ -813,7 +994,7 @@ export default function BillsPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-[11px] uppercase tracking-wide text-gray-500">Due</p>
-                        <p className="text-sm font-medium text-gray-700">
+                        <p className={`text-sm font-medium ${isOverdue ? 'text-red-600' : 'text-gray-700'}`}>
                           {new Date(bill.due_date).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
                         </p>
                       </div>

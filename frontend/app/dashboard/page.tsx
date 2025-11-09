@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Loader2, Award } from "lucide-react";
 
 export default function WalletDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -326,6 +326,26 @@ export default function WalletDashboard() {
                       </h4>
                       <p className="text-gray-600">{insights.tip}</p>
                     </div>
+
+                    {/* 🧠 Mission Card */}
+                    {insights?.mission && (
+                      <Card className="mt-4 bg-blue-50 border-blue-200">
+                        <CardHeader className="flex items-center gap-2">
+                          {/* Icon placeholder; replace with Award icon if lucide-react imported */}
+                          <span className="text-blue-500">🏅</span>
+                          <CardTitle>Mission of the Week</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="font-semibold text-gray-800">
+                            {insights.mission.title}
+                          </p>
+                          <p className="text-gray-600">{insights.mission.description}</p>
+                          <p className="text-blue-600 font-medium mt-2">
+                            🏅 Reward: {insights.mission.reward}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
                   </motion.div>
                 )}
 
@@ -357,10 +377,12 @@ export default function WalletDashboard() {
               </CardHeader>
               <CardContent>
                 {payments.length === 0 ? (
+                  // ... (your existing no payments)
                   <p className="text-gray-500 text-center py-4">
                     No payments found yet 💸
                   </p>
                 ) : (
+                  // ... (your existing payments table)
                   <table className="w-full text-left text-gray-600">
                     <thead>
                       <tr className="border-b text-sm text-gray-500">
@@ -444,37 +466,63 @@ export default function WalletDashboard() {
                         let multiplierDisplay: string | null = null;
                         let reasonDisplay: string | null = null;
 
-                        if (log.source_type === "payment" && payment && bill) {
+                        if (log.source_type === "late_penalty" && payment && bill) {
+                          // Late penalty entry
+                          multiplierDisplay = "-";
+                          
+                          const payDate = new Date(payment.created_at);
+                          const dueDate = new Date(bill.due_date);
+                          
+                          payDate.setHours(0, 0, 0, 0);
+                          dueDate.setHours(0, 0, 0, 0);
+                          
+                          const diffDays = Math.round((payDate.getTime() - dueDate.getTime()) / dayMs);
+                          reasonDisplay = `Late payment penalty (${diffDays} days late)`;
+                        } else if (log.source_type === "payment" && payment && bill) {
                           const baseRate = 0.05; // must match bills page base rate
                           const baseCredit = Math.round((payment.amount_paid * baseRate) * 100) / 100;
-                          // Multiplier only meaningful for non-negative rewards; for penalties, show x0.00
-                          if (baseCredit > 0) {
-                            if (changeAmount >= 0) {
-                              const effectiveMultiplier = changeAmount / baseCredit;
-                              multiplierDisplay = `x${effectiveMultiplier.toFixed(2)}`;
-                            } else {
-                              multiplierDisplay = `x0.00`;
-                            }
+                          
+                          // Calculate multiplier: actual credit / base credit
+                          if (baseCredit > 0 && Math.abs(baseCredit) > 0.001) {
+                            const effectiveMultiplier = changeAmount / baseCredit;
+                            multiplierDisplay = `x${effectiveMultiplier.toFixed(2)}`;
                           } else {
                             multiplierDisplay = "-";
                           }
 
                           const payDate = new Date(payment.created_at);
                           const dueDate = new Date(bill.due_date);
-                          // Normalize to local midnight compare, but a simple day diff is enough for UI
-                          const diffDays = Math.ceil((payDate.getTime() - dueDate.getTime()) / dayMs);
+                          const createdDate = new Date(bill.created_at);
+                          
+                          // Set to midnight for accurate day comparison
+                          payDate.setHours(0, 0, 0, 0);
+                          dueDate.setHours(0, 0, 0, 0);
+                          createdDate.setHours(0, 0, 0, 0);
+                          
+                          const diffDays = Math.round((payDate.getTime() - dueDate.getTime()) / dayMs);
+                          
                           if (diffDays < 0) {
-                            reasonDisplay = `Early by ${Math.abs(diffDays)} day(s)`;
+                            // Paid early
+                            const daysEarly = Math.abs(diffDays);
+                            const totalWindow = Math.round((dueDate.getTime() - createdDate.getTime()) / dayMs);
+                            reasonDisplay = `Early by ${daysEarly} day(s)`;
+                            if (totalWindow > 0) {
+                              reasonDisplay += ` (${totalWindow} day window)`;
+                            }
                           } else if (diffDays === 0) {
-                            reasonDisplay = "On due date";
+                            // Paid on due date
+                            const sameAsCreated = createdDate.getTime() === dueDate.getTime();
+                            if (sameAsCreated) {
+                              reasonDisplay = "On due date (same as created)";
+                            } else {
+                              reasonDisplay = "On due date (max bonus)";
+                            }
                           } else {
+                            // Paid late - subtract 2 credits per day
+                            const latePenalty = diffDays * 2;
+                            reasonDisplay = `Late by ${diffDays} day(s) • Penalty: -£${latePenalty.toFixed(2)}`;
+                            // Note: Late payments will have a separate penalty entry
                             reasonDisplay = `Late by ${diffDays} day(s)`;
-                          }
-
-                          // If penalty occurred (negative change), append penalty amount detail
-                          if (changeAmount < 0 && baseCredit > 0) {
-                            const penalty = Math.max(0, baseCredit - changeAmount); // since changeAmount is negative
-                            reasonDisplay = `${reasonDisplay} • Penalty £${penalty.toFixed(2)}`;
                           }
                         }
 
@@ -523,6 +571,8 @@ export default function WalletDashboard() {
                             <td className="text-sm text-gray-600">
                               {log.source_type === "payment"
                                 ? "Payment reward"
+                                : log.source_type === "late_penalty"
+                                ? "Late payment penalty"
                                 : log.source_type === "redemption"
                                 ? "Reward redemption"
                                 : log.source_type || "Transaction"}
