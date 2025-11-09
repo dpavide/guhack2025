@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -733,233 +733,165 @@ export default function BillsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-8">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-slate-50 py-10">
+      <div className="mx-auto max-w-6xl px-4 space-y-8">
         {/* Header */}
-        <div className="mb-4">
-          <h1 className="text-3xl font-bold text-gray-800">Bills</h1>
-        </div>
-
-        {/* Filter Options and Create Button Row */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex gap-2 bg-white rounded-lg p-1 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-800">Bills</h1>
+            <p className="text-sm text-gray-500 mt-1">Manage and track shared expenses with friends</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+              {(["all","inviter","invited","history"] as const).map(key => (
+                <button
+                  key={key}
+                  onClick={() => setFilterType(key)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${filterType === key ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  {key === 'all' && 'All'}
+                  {key === 'inviter' && 'Created'}
+                  {key === 'invited' && 'Invited'}
+                  {key === 'history' && 'History'}
+                </button>
+              ))}
+            </div>
             <button
-              onClick={() => setFilterType("all")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                filterType === "all" 
-                  ? "bg-blue-600 text-white" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
+              onClick={() => setIsCreateDialogOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-green-600 text-white text-sm font-semibold shadow-sm hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400"
             >
-              All
-            </button>
-            <button
-              onClick={() => setFilterType("inviter")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                filterType === "inviter" 
-                  ? "bg-blue-600 text-white" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Inviter
-            </button>
-            <button
-              onClick={() => setFilterType("invited")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                filterType === "invited" 
-                  ? "bg-blue-600 text-white" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Invited
-            </button>
-            <button
-              onClick={() => setFilterType("history")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                filterType === "history" 
-                  ? "bg-blue-600 text-white" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              History
+              <span className="text-lg leading-none">＋</span> Create Bill
             </button>
           </div>
-          
-          {/* Create Bill Button */}
-          <button
-            onClick={() => setIsCreateDialogOpen(true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-md"
-          >
-            + Create Bill
-          </button>
         </div>
 
         {/* Bills List */}
-        <div className="space-y-4">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {filteredBills.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="text-6xl mb-4">📋</div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">No bills found</h3>
-              <p className="text-gray-500">
-                {filterType === "inviter" && "You haven't created any active bills yet"}
-                {filterType === "invited" && "You don't have any active invited bills"}
-                {filterType === "history" && "No completed bills in history"}
-                {filterType === "all" && "No bills available"}
-              </p>
-            </div>
+            <Card className="md:col-span-2 lg:col-span-3 border-dashed border-2">
+              <CardContent className="py-14 flex flex-col items-center justify-center text-center">
+                <div className="mb-3 text-5xl">📋</div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-1">No bills found</h3>
+                <p className="text-sm text-gray-500 max-w-sm">
+                  {filterType === 'inviter' && 'You have not created any active bills yet.'}
+                  {filterType === 'invited' && 'You have no active bills you were invited to.'}
+                  {filterType === 'history' && 'No completed bills yet.'}
+                  {filterType === 'all' && 'Create a bill to get started.'}
+                </p>
+              </CardContent>
+            </Card>
           ) : (
             filteredBills.map((bill) => {
               const paidCount = getPaidCount(bill);
               const totalPeople = getTotalPeople(bill);
-              const isFullyPaid = bill.status === "paid" || paidCount === totalPeople;
-              
+              const isFullyPaid = bill.status === 'paid' || paidCount === totalPeople;
+              const userPaid = hasUserPaid(bill);
               return (
-            <Card
-              key={bill.id}
-              className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => handleDetailsClick(bill)}
-            >
-              <CardContent className="p-6">
-                <div className="flex justify-between">
-                  {/* Left Side */}
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xl font-semibold text-gray-800">
-                        {bill.title}
-                      </h3>
-                      {/* Status Badge */}
-                      {isFullyPaid && (
-                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                          PAID
-                        </span>
-                      )}
-                      {/* Category Badge */}
-                      {bill.category && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full capitalize">
-                          {bill.category}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-2xl font-bold text-blue-600">
-                      £{Number(bill.amount).toFixed(2)}
-                    </p>
-                    
-                    {/* Description */}
-                    {bill.description && (
-                      <p className="text-sm text-gray-600 line-clamp-1">
-                        {bill.description}
-                      </p>
-                    )}
-
-                    {/* Distinguish the role of user */}
-                    {isCreator(bill) ? (
-                      paidCount < totalPeople ? (
-                        <button
-                          onClick={(e) => handleInviteClick(e, bill)}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
-                        >
-                          Invite Payers
-                        </button>
-                      ) : (
-                        <p className="text-sm text-green-600 font-medium">
-                          ✓ All paid
+                <Card
+                  key={bill.id}
+                  className="group relative overflow-hidden border shadow-sm hover:shadow-md transition cursor-pointer"
+                  onClick={() => handleDetailsClick(bill)}
+                >
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-start justify-between gap-2">
+                      <span className="text-base font-semibold text-gray-800 line-clamp-1">{bill.title}</span>
+                      <span className="flex gap-1">
+                        {bill.category && (
+                          <span className="px-2 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-medium capitalize border border-indigo-100">{bill.category}</span>
+                        )}
+                        {isFullyPaid && (
+                          <span className="px-2 py-1 rounded-full bg-green-50 text-green-600 text-[11px] font-semibold border border-green-200">Paid</span>
+                        )}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-end justify-between">
+                      <div className="space-y-1">
+                        <p className="text-2xl font-bold tracking-tight text-indigo-600">£{Number(bill.amount).toFixed(2)}</p>
+                        {bill.description && <p className="text-xs text-gray-500 line-clamp-1">{bill.description}</p>}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] uppercase tracking-wide text-gray-500">Due</p>
+                        <p className="text-sm font-medium text-gray-700">
+                          {new Date(bill.due_date).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
                         </p>
-                      )
-                    ) : (
-                      hasUserPaid(bill) ? (
-                        paidCount === totalPeople ? (
-                          <p className="text-sm text-green-600 font-medium">
-                            ✓ All paid
-                          </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex -space-x-2">
+                        {bill.bill_participants?.slice(0,5).map(participant => (
+                          <div
+                            key={participant.id}
+                            className={`relative w-9 h-9 rounded-full ring-2 ring-white overflow-hidden bg-gray-200 flex items-center justify-center text-[11px] font-semibold text-white ${participant.has_paid ? 'bg-green-500' : 'bg-gray-400'} shadow-sm`}
+                            title={`${getUserDisplayName(participant.profile)}${participant.has_paid ? ' (paid)' : ''}`}
+                          >
+                            {participant.profile.avatar_url ? (
+                              <Image
+                                src={participant.profile.avatar_url}
+                                alt={getUserDisplayName(participant.profile)}
+                                fill
+                                className={`object-cover ${participant.has_paid ? '' : 'opacity-60'}`}
+                              />
+                            ) : (
+                              getInitials(participant.profile)
+                            )}
+                            {participant.has_paid && (
+                              <span className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold shadow">✓</span>
+                            )}
+                          </div>
+                        ))}
+                        {bill.bill_participants && bill.bill_participants.length > 5 && (
+                          <div className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 ring-2 ring-white text-xs font-medium text-gray-600">+{bill.bill_participants.length - 5}</div>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 font-medium">
+                        {paidCount}/{totalPeople} paid
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between pt-2">
+                      {isCreator(bill) ? (
+                        !isFullyPaid ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleInviteClick(e,bill); }}
+                            className="px-3 py-1.5 rounded-md bg-purple-600 text-white text-xs font-medium hover:bg-purple-700"
+                          >Invite</button>
                         ) : (
-                          <p className="text-sm text-gray-600">
-                            {paidCount} / {totalPeople} people paid
-                          </p>
+                          <span className="text-xs font-medium text-green-600">All paid</span>
+                        )
+                      ) : userPaid ? (
+                        isFullyPaid ? (
+                          <span className="text-xs font-medium text-green-600">All paid</span>
+                        ) : (
+                          <span className="text-xs text-gray-600">Waiting others</span>
                         )
                       ) : (
                         <button
-                          onClick={(e) => handlePayClick(e, bill)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                        >
-                          Pay
-                        </button>
-                      )
-                    )}
-                  </div>
-
-                  {/* Right Side */}
-                  <div className="flex flex-col items-end space-y-3">
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Due Date</p>
-                      <p className="text-lg font-medium text-gray-800">
-                        {new Date(bill.due_date).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </p>
+                          onClick={(e) => { e.stopPropagation(); handlePayClick(e,bill); }}
+                          className="px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700"
+                        >Pay</button>
+                      )}
+                      <span className="text-xs text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition">Details →</span>
                     </div>
-
-                    {/* Avatar List */}
-                    <div className="flex -space-x-2">
-                      {bill.bill_participants?.map((participant) => (
-                        <div
-                          key={participant.id}
-                          className="relative w-10 h-10 rounded-full border-2 border-white overflow-hidden"
-                          title={getUserDisplayName(participant.profile)}
-                        >
-                          {participant.profile.avatar_url ? (
-                            <Image
-                              src={participant.profile.avatar_url}
-                              alt={getUserDisplayName(participant.profile)}
-                              fill
-                              className={`object-cover rounded-full ${
-                                participant.has_paid ? '' : 'opacity-60'
-                              }`}
-                            />
-                          ) : (
-                            <div
-                              className={`w-full h-full flex items-center justify-center text-white font-semibold ${
-                                participant.has_paid
-                                  ? "bg-green-500"
-                                  : "bg-gray-400"
-                              }`}
-                            >
-                              {getInitials(participant.profile)}
-                            </div>
-                          )}
-                          {/* Paid Checkmark Overlay */}
-                          {participant.has_paid && (
-                            <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center">
-                              <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                                <span className="text-white text-xs font-bold">✓</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <button className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                      Details →
-                    </button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}))}
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
         </div>
 
         {/* Details Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">
+              <DialogTitle className="text-xl font-semibold">
                 {selectedBill?.title}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-5 py-2">
               {/* Bill Info */}
               <div className="grid grid-cols-2 gap-4 pb-4 border-b">
                 <div>
@@ -1117,10 +1049,10 @@ export default function BillsPage() {
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">Create New Bill</DialogTitle>
+              <DialogTitle className="text-xl font-semibold">Create New Bill</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-6 py-4">
+            <div className="space-y-6 py-2">
               {/* Basic Information */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-700">Basic Information</h3>
@@ -1366,9 +1298,7 @@ export default function BillsPage() {
         <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">
-                Invite Payers - {invitingBill?.title}
-              </DialogTitle>
+              <DialogTitle className="text-xl font-semibold">Invite Payers - {invitingBill?.title}</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
@@ -1426,7 +1356,7 @@ export default function BillsPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setIsInviteDialogOpen(false)}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
@@ -1455,12 +1385,10 @@ export default function BillsPage() {
         <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">
-                💳 Pay with Bank Card
-              </DialogTitle>
+              <DialogTitle className="text-xl font-semibold">💳 Pay with Bank Card</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-5 py-2">
               {/* Bill Information */}
               {payingBill && (
                 <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
