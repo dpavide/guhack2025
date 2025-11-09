@@ -206,7 +206,7 @@ export default function FriendsPage() {
   const renderAvatar = (profile?: Profile | null) => {
     if (profile?.avatar_url) {
       return (
-        <div className="w-16 h-16 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-lg flex-shrink-0">
+        <div className="w-16 h-16 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-lg shrink-0">
           <Image
             src={profile.avatar_url}
             alt={profile.username || "avatar"}
@@ -222,7 +222,7 @@ export default function FriendsPage() {
       (profile?.first_name || profile?.username || "?")[0]?.toUpperCase() || "?";
 
     return (
-      <div className="w-16 h-16 flex items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-slate-700 to-slate-900 text-white text-3xl font-bold shadow-lg flex-shrink-0">
+      <div className="w-16 h-16 flex items-center justify-center rounded-full border-4 border-white bg-linear-to-br from-slate-700 to-slate-900 text-white text-3xl font-bold shadow-lg shrink-0">
         {letter}
       </div>
     );
