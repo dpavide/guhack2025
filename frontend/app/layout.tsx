@@ -3,7 +3,7 @@ import "./globals.css";
 import LayoutClient from "@/components/LayoutClient";
 
 export const metadata: Metadata = {
-  title: "GUHack2025 - Next.js + FastAPI",
+  title: "Splitr",
   description: "Full-stack application with Next.js frontend and FastAPI backend",
 };
 
