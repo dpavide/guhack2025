@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react"; // ✨ NEW: Import a loading icon
 
 export default function WalletDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -15,8 +16,14 @@ export default function WalletDashboard() {
   const [userGoal, setUserGoal] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ✨ NEW: State for Gemini analysis
+  const [insights, setInsights] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   // 🔁 Fetch all user-related data
   useEffect(() => {
+    // ... (Your existing fetchData function - no changes needed)
     const fetchData = async () => {
       setLoading(true);
 
@@ -41,7 +48,8 @@ export default function WalletDashboard() {
       // 3️⃣ Fetch payments + related bills
       const { data: paymentData, error: paymentError } = await supabase
         .from("payments")
-        .select(`
+        .select(
+          `
           id,
           amount_paid,
           status,
@@ -52,7 +60,8 @@ export default function WalletDashboard() {
             amount,
             due_date
           )
-        `)
+        `
+        )
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -74,13 +83,9 @@ export default function WalletDashboard() {
     };
 
     fetchData();
-
   }, []);
 
-  
-
-  // Read front-end only goal from localStorage and listen for changes.
-  // We only use the stored goal if it matches the current profile user id (or if profile is not loaded yet we still allow it).
+  // ... (Your existing localStorage useEffect - no changes needed)
   useEffect(() => {
     const load = () => {
       try {
@@ -104,10 +109,54 @@ export default function WalletDashboard() {
     };
 
     window.addEventListener("goalChanged", handler as EventListener);
-    return () => window.removeEventListener("goalChanged", handler as EventListener);
+    return () =>
+      window.removeEventListener("goalChanged", handler as EventListener);
   }, [profile?.id]);
 
-  if (loading)
+  // ✨ NEW: Handler function to call our Next.js API route
+  const handleAnalyzeSpending = async () => {
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setInsights(null);
+
+    // Prepare the data for the AI. We already have it in state!
+    const spendingData = payments
+      .filter((p) => p.status === "success") // Only analyze successful payments
+      .map((p) => ({
+        amount: p.amount_paid,
+        category: p.bills?.title || "Uncategorized", // Use bill title as category
+        date: p.created_at,
+      }));
+
+    if (spendingData.length === 0) {
+      setAnalysisError("You have no successful payments to analyze yet.");
+      setIsAnalyzing(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactions: spendingData }), // Send the data
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to fetch insights");
+      }
+
+      const data = await response.json();
+      setInsights(data);
+    } catch (err: any) {
+      setAnalysisError(err.message);
+    }
+
+    setIsAnalyzing(false);
+  };
+
+  if (loading) {
+    // ... (Your existing loading component - no changes)
     return (
       <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-white">
         <motion.div
@@ -132,9 +181,10 @@ export default function WalletDashboard() {
         </motion.div>
       </div>
     );
+  }
 
   const currentCredits = profile?.credits || 0;
-  const targetProgress = userGoal 
+  const targetProgress = userGoal
     ? Math.min(100, (currentCredits / userGoal.credit_goal) * 100)
     : Math.min(100, currentCredits);
 
@@ -146,6 +196,7 @@ export default function WalletDashboard() {
       className="min-h-screen bg-linear-to-b from-blue-50 to-white p-8"
     >
       {/* 👋 Header */}
+      {/* ... (Your existing Header Card - no changes) ... */}
       <motion.div
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -161,8 +212,11 @@ export default function WalletDashboard() {
               >
                 Welcome back,{" "}
                 {profile
-                  ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "User"
-                  : "User"} 👋
+                  ? `${profile.first_name || ""} ${
+                      profile.last_name || ""
+                    }`.trim() || "User"
+                  : "User"}{" "}
+                👋
               </motion.span>
             </CardTitle>
           </CardHeader>
@@ -185,7 +239,12 @@ export default function WalletDashboard() {
                     transition={{ delay: 0.5 }}
                     className="text-sm text-gray-400 mt-1"
                   >
-                    🎯 {Math.min(100, Math.round((currentCredits / userGoal.credit_goal) * 100))}% towards {userGoal.item_name}
+                    🎯{" "}
+                    {Math.min(
+                      100,
+                      Math.round((currentCredits / userGoal.credit_goal) * 100)
+                    )}
+                    % towards {userGoal.item_name}
                   </motion.p>
                 ) : (
                   <motion.p
@@ -211,7 +270,7 @@ export default function WalletDashboard() {
                       transition={{
                         duration: 1.5,
                         delay: 0.6,
-                        ease: "easeOut"
+                        ease: "easeOut",
                       }}
                       className="h-full bg-linear-to-r from-blue-500 to-blue-600 rounded-full"
                     />
@@ -230,142 +289,206 @@ export default function WalletDashboard() {
         transition={{ duration: 0.5, delay: 0.3 }}
       >
         <Tabs defaultValue="history">
-        <TabsList className="mb-4">
-          <TabsTrigger value="history">Payment History</TabsTrigger>
-          <TabsTrigger value="credits">Credit History</TabsTrigger>
-        </TabsList>
+          <TabsList className="mb-4">
+            <TabsTrigger value="history">Payment History</TabsTrigger>
+            <TabsTrigger value="credits">Credit History</TabsTrigger>
+          </TabsList>
 
-        {/* 💳 Payment History Tab */}
-        <TabsContent value="history">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Recent Payments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {payments.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">
-                  No payments found yet 💸
-                </p>
-              ) : (
-                <table className="w-full text-left text-gray-600">
-                  <thead>
-                    <tr className="border-b text-sm text-gray-500">
-                      <th>Date</th>
-                      <th>Bill</th>
-                      <th>Amount Paid</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payments.map((p) => (
-                      <motion.tr
-                        key={p.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.05 }}
-                        className="border-b hover:bg-blue-50"
-                      >
-                        <td>{new Date(p.created_at).toLocaleDateString()}</td>
-                        <td>{p.bills?.title || "Unknown"}</td>
-                        <td>£{p.amount_paid.toFixed(2)}</td>
-                        <td>
-                          <span
-                            className={`font-medium ${
-                              p.status === "success"
-                                ? "text-green-500"
-                                : "text-red-500"
-                            }`}
-                          >
-                            {p.status}
-                          </span>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+          {/* 💳 Payment History Tab */}
+          <TabsContent value="history">
+            {/* ✨ NEW: AI Spending Analysis Card */}
+            <Card className="mb-6 shadow-sm border-blue-100">
+              <CardHeader>
+                <CardTitle className="text-lg">AI Spending Insights</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {insights && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <h4 className="font-semibold text-gray-700">Summary</h4>
+                      <p className="text-gray-600">{insights.summary}</p>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-700">
+                        Top Spending Categories
+                      </h4>
+                      <ul className="list-disc list-inside text-gray-600">
+                        {insights.topCategories.map((category: string) => (
+                          <li key={category}>{category}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-700">
+                        ✨ Actionable Tip
+                      </h4>
+                      <p className="text-gray-600">{insights.tip}</p>
+                    </div>
+                  </motion.div>
+                )}
 
-        {/* 💰 Credit History Tab */}
-        <TabsContent value="credits">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Credit Transaction History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {creditHistory.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">
-                  No credit transactions found yet 💰
-                </p>
-              ) : (
-                <table className="w-full text-left text-gray-600">
-                  <thead>
-                    <tr className="border-b text-sm text-gray-500">
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th>Amount</th>
-                      <th>Balance After</th>
-                      <th>Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {creditHistory.map((log) => {
-                      const changeAmount = Number(log.change_amount || 0);
-                      const isPositive = changeAmount > 0;
-                      const amount = Math.abs(changeAmount);
-                      
-                      return (
+                {analysisError && (
+                  <p className="text-red-500">{analysisError}</p>
+                )}
+
+                <Button
+                  onClick={handleAnalyzeSpending}
+                  disabled={isAnalyzing}
+                  className="mt-4"
+                >
+                  {isAnalyzing && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {isAnalyzing
+                    ? "Analyzing..."
+                    : insights
+                    ? "Re-analyze Spending"
+                    : "Analyze My Spending"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Your existing Recent Payments Card */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Recent Payments</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {payments.length === 0 ? (
+                  // ... (your existing no payments)
+                  <p className="text-gray-500 text-center py-4">
+                    No payments found yet 💸
+                  </p>
+                ) : (
+                  // ... (your existing payments table)
+                  <table className="w-full text-left text-gray-600">
+                    <thead>
+                      <tr className="border-b text-sm text-gray-500">
+                        <th>Date</th>
+                        <th>Bill</th>
+                        <th>Amount Paid</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.map((p) => (
                         <motion.tr
-                          key={log.log_id}
+                          key={p.id}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.05 }}
                           className="border-b hover:bg-blue-50"
                         >
-                          <td className="py-3">
-                            {new Date(log.created_at).toLocaleDateString()}
+                          <td>
+                            {new Date(p.created_at).toLocaleDateString()}
                           </td>
+                          <td>{p.bills?.title || "Unknown"}</td>
+                          <td>£{p.amount_paid.toFixed(2)}</td>
                           <td>
                             <span
-                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                isPositive
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
+                              className={`font-medium ${
+                                p.status === "success"
+                                  ? "text-green-500"
+                                  : "text-red-500"
                               }`}
                             >
-                              {isPositive ? "➕ Earned" : "➖ Spent"}
+                              {p.status}
                             </span>
-                          </td>
-                          <td>
-                            <span
-                              className={`font-semibold ${
-                                isPositive ? "text-green-600" : "text-red-600"
-                              }`}
-                            >
-                              {isPositive ? "+" : "-"}£{amount.toFixed(2)}
-                            </span>
-                          </td>
-                          <td className="font-medium">
-                            £{Number(log.balance_after || 0).toFixed(2)}
-                          </td>
-                          <td className="text-sm text-gray-600">
-                            {log.source_type === "payment" 
-                              ? "Payment reward" 
-                              : log.source_type === "redemption"
-                              ? "Reward redemption"
-                              : log.source_type || "Transaction"}
                           </td>
                         </motion.tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 💰 Credit History Tab */}
+          {/* ... (Your existing Credit History Tab - no changes) ... */}
+          <TabsContent value="credits">
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Credit Transaction History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {creditHistory.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">
+                    No credit transactions found yet 💰
+                  </p>
+                ) : (
+                  <table className="w-full text-left text-gray-600">
+                    <thead>
+                      <tr className="border-b text-sm text-gray-500">
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Balance After</th>
+                        <th>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {creditHistory.map((log) => {
+                        const changeAmount = Number(log.change_amount || 0);
+                        const isPositive = changeAmount > 0;
+                        const amount = Math.abs(changeAmount);
+
+                        return (
+                          <motion.tr
+                            key={log.log_id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.05 }}
+                            className="border-b hover:bg-blue-50"
+                          >
+                            <td className="py-3">
+                              {new Date(log.created_at).toLocaleDateString()}
+                            </td>
+                            <td>
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  isPositive
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {isPositive ? "➕ Earned" : "➖ Spent"}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`font-semibold ${
+                                  isPositive
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {isPositive ? "+" : "-"}£{amount.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="font-medium">
+                              £{Number(log.balance_after || 0).toFixed(2)}
+                            </td>
+                            <td className="text-sm text-gray-600">
+                              {log.source_type === "payment"
+                                ? "Payment reward"
+                                : log.source_type === "redemption"
+                                ? "Reward redemption"
+                                : log.source_type || "Transaction"}
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </motion.div>
     </motion.div>
