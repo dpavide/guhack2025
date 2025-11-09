@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent } from "@/components/ui/card"; // Adjusted: removed duplicate CardHeader, CardTitle
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Gift, Lock, Sparkles, Target } from "lucide-react";
+import { Gift, Lock, Sparkles, Target, History } from "lucide-react";
 
 // Map item names to image files
 const getItemImage = (itemName: string): string | null => {
@@ -40,6 +41,8 @@ export default function RewardsPage() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [currentGoal, setCurrentGoal] = useState<any>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [creditHistory, setCreditHistory] = useState<any[]>([]);
 
   // Listen for goal changes from other components
   useEffect(() => {
@@ -118,7 +121,24 @@ export default function RewardsPage() {
 
     const newCredits = credits - item.credit_cost;
 
-    // 1️⃣ Deduct credits from profile
+    // 1️⃣ Record to credit_log (do this first to maintain transaction integrity)
+    const { error: logError } = await supabase.from("credit_log").insert([
+      {
+        user_id: userId,
+        source_type: "redemption",
+        source_id: null, // source_id is optional, set to null for redemptions
+        change_amount: -item.credit_cost,
+        balance_after: newCredits,
+      },
+    ]);
+
+    if (logError) {
+      alert("Failed to log credit transaction");
+      console.error("Credit log error:", logError);
+      return;
+    }
+
+    // 2️⃣ Deduct credits from profile
     const { error: updateError } = await supabase
       .from("profiles")
       .update({ credits: newCredits })
@@ -126,22 +146,18 @@ export default function RewardsPage() {
 
     if (updateError) {
       alert("Failed to redeem item");
-      console.error(updateError);
+      console.error("Profile update error:", updateError);
       return;
     }
 
-    // 2️⃣ Record redemption
-    await supabase.from("redemptions").insert([
-      {
-        user_id: userId,
-        redemption_type: item.item_name,
-        amount: item.credit_cost,
-        description: item.item_description,
-      },
-    ]);
-
     // 3️⃣ Update UI
     setCredits(newCredits);
+    
+    // Refresh credit history if dialog is open
+    if (isHistoryOpen) {
+      await fetchCreditHistory();
+    }
+    
     alert(`✅ Successfully redeemed ${item.item_name}!`);
   };
   
@@ -173,6 +189,37 @@ export default function RewardsPage() {
     } catch (err) {
       console.error("Failed to update goal in localStorage", err);
     }
+  };
+
+  // Fetch credit history
+  const fetchCreditHistory = async () => {
+    if (!userId) return;
+
+    try {
+      // Fetch credit history from credit_log table
+      const { data, error } = await supabase
+        .from("credit_log")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error("Failed to fetch credit history:", error);
+        setCreditHistory([]);
+      } else {
+        setCreditHistory(data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching credit history:", error);
+      setCreditHistory([]);
+    }
+  };
+
+  // Open history dialog
+  const handleViewHistory = async () => {
+    await fetchCreditHistory();
+    setIsHistoryOpen(true);
   };
 
   if (loading)
@@ -220,18 +267,29 @@ export default function RewardsPage() {
               </p>
             </div>
             
-            {/* Credits Display */}
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="bg-white border-2 border-blue-200 rounded-xl px-6 py-4 shadow-md"
-            >
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-bold text-blue-600">{credits.toFixed(0)}</span>
-                <span className="text-gray-600 font-medium">credits</span>
-              </div>
-            </motion.div>
+            {/* Credits Display and History Button */}
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                onClick={handleViewHistory}
+                className="flex items-center gap-2 border-blue-200 hover:bg-blue-50"
+              >
+                <History className="w-4 h-4" />
+                View History
+              </Button>
+              
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="bg-white border-2 border-blue-200 rounded-xl px-6 py-4 shadow-md"
+              >
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-blue-600">{credits.toFixed(0)}</span>
+                  <span className="text-gray-600 font-medium">credits</span>
+                </div>
+              </motion.div>
+            </div>
           </motion.div>
         </div>
       </div>
@@ -358,6 +416,89 @@ export default function RewardsPage() {
           </div>
         )}
       </div>
+
+      {/* Credit History Dialog */}
+      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <History className="w-6 h-6 text-blue-600" />
+              Credit Transaction History
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="mt-4">
+            {creditHistory.length === 0 ? (
+              <div className="text-center py-12">
+                <History className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">No credit transactions yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {creditHistory.map((log) => {
+                  const changeAmount = Number(log.change_amount || 0);
+                  const isPositive = changeAmount > 0;
+                  const amount = Math.abs(changeAmount);
+                  
+                  return (
+                    <motion.div
+                      key={log.log_id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                          isPositive ? 'bg-green-100' : 'bg-red-100'
+                        }`}>
+                          {isPositive ? (
+                            <Sparkles className="w-6 h-6 text-green-600" />
+                          ) : (
+                            <Gift className="w-6 h-6 text-red-600" />
+                          )}
+                        </div>
+                        
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              isPositive
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}>
+                              {isPositive ? "➕ Earned" : "➖ Spent"}
+                            </span>
+                            <span className="text-sm text-gray-600 font-medium">
+                              {log.source_type === "payment" 
+                                ? "Payment reward" 
+                                : log.source_type === "redemption"
+                                ? "Reward redemption"
+                                : log.source_type || "Transaction"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            {new Date(log.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-right">
+                        <div className={`text-xl font-bold ${
+                          isPositive ? "text-green-600" : "text-red-600"
+                        }`}>
+                          {isPositive ? "+" : "-"}£{amount.toFixed(2)}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Balance: £{Number(log.balance_after || 0).toFixed(2)}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
