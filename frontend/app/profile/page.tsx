@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { Camera, Edit2, Check, X } from "lucide-react";
+import { motion } from "framer-motion";
 
 type Profile = {
   id: string;
@@ -32,18 +33,18 @@ export default function ProfilePage() {
   }, []);
 
   const loadProfile = async () => {
-    const { data: auth } = await supabase.auth.getUser();
-    const user = auth?.user;
-    if (!user) {
-      router.push("/");
-      return;
-    }
+      const { data: auth } = await supabase.auth.getUser();
+      const user = auth?.user;
+      if (!user) {
+        router.push("/");
+        return;
+      }
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
 
     const enriched: Profile = {
       id: user.id,
@@ -56,9 +57,9 @@ export default function ProfilePage() {
       created_at: user.created_at ?? null,
     };
 
-    setProfile(enriched);
+        setProfile(enriched);
     setBio(enriched.bio ?? "");
-    setLoading(false);
+        setLoading(false);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,11 +124,27 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mb-4"></div>
-          <p className="text-gray-600">Loading profile...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="inline-block w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full mb-4"
+          />
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="text-gray-600 text-lg font-medium"
+          >
+            Loading profile...
+          </motion.p>
+        </motion.div>
       </div>
     );
   }
@@ -271,7 +288,7 @@ export default function ProfilePage() {
         <Card className="shadow-md">
           <CardHeader className="border-b bg-gray-50">
             <CardTitle className="text-lg">Account Information</CardTitle>
-          </CardHeader>
+        </CardHeader>
           <CardContent className="space-y-0 pt-3">
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">Username</span>
@@ -280,29 +297,29 @@ export default function ProfilePage() {
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">First Name</span>
               <span className="text-gray-900 text-sm">{profile.first_name ?? "—"}</span>
-            </div>
+          </div>
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">Last Name</span>
               <span className="text-gray-900 text-sm">{profile.last_name ?? "—"}</span>
-            </div>
+          </div>
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">Email</span>
               <span className="text-gray-900 text-sm">{profile.email ?? "—"}</span>
-            </div>
+          </div>
             <div className="flex justify-between py-3 hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">Joined</span>
               <span className="text-gray-900 text-sm">
-                {profile.created_at
+              {profile.created_at
                   ? new Date(profile.created_at).toLocaleDateString("en-US", {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
                     })
-                  : "—"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+                : "—"}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
       </div>
     </div>
   );
