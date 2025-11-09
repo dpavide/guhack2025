@@ -11,6 +11,7 @@ import { Camera, Edit2, Check, X } from "lucide-react";
 type Profile = {
   id: string;
   email: string | null;
+  username?: string | null;
   full_name?: string | null;
   avatar_url?: string | null;
   bio?: string | null;
@@ -30,31 +31,32 @@ export default function ProfilePage() {
   }, []);
 
   const loadProfile = async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth?.user;
-      if (!user) {
-        router.push("/");
-        return;
-      }
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+    if (!user) {
+      router.push("/");
+      return;
+    }
 
-        const { data } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
 
     const enriched: Profile = {
       id: user.id,
       email: user.email ?? null,
+      username: data?.username ?? null,
       full_name: data?.full_name ?? null,
       avatar_url: data?.avatar_url ?? null,
       bio: data?.bio ?? null,
       created_at: user.created_at ?? null,
     };
 
-        setProfile(enriched);
+    setProfile(enriched);
     setBio(enriched.bio ?? "");
-        setLoading(false);
+    setLoading(false);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,7 +71,6 @@ export default function ProfilePage() {
     setUploading(true);
 
     try {
-      // Convert to base64 and store in database (simple approach)
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64String = reader.result as string;
@@ -145,11 +146,9 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto">
         {/* Profile Header Card */}
         <Card className="mb-6 overflow-hidden shadow-lg">
-          {/* Banner */}
           <div className="h-28 w-full bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700" />
           
           <CardContent className="relative pt-0 pb-6">
-            {/* Avatar */}
             <div className="absolute -top-14 left-6">
               <div className="relative group">
                 <div className="w-28 h-28 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-lg">
@@ -162,12 +161,11 @@ export default function ProfilePage() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900 text-white text-3xl font-bold rounded-full">
-                      {(profile.full_name || profile.email || "?")[0].toUpperCase()}
+                      {(profile.full_name || profile.username || "?")[0].toUpperCase()}
                     </div>
                   )}
                 </div>
-                
-                {/* Camera button */}
+
                 <label className="absolute bottom-0 right-0 bg-slate-900 hover:bg-black text-white p-2 rounded-full shadow-lg transition-all cursor-pointer group-hover:scale-110 duration-200 border-2 border-white">
                   {uploading ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -185,16 +183,16 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Profile Info */}
             <div className="pt-16">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 mb-1">
                     {profile.full_name || "Unnamed User"}
                   </h1>
-                  <p className="text-gray-600 text-sm">{profile.email}</p>
+                  {/* 👇 Replace email with username */}
+                  <p className="text-gray-600 text-sm">@{profile.username ?? "unknown"}</p>
                 </div>
-                
+
                 <Button 
                   onClick={handleLogout} 
                   variant="outline"
@@ -205,66 +203,63 @@ export default function ProfilePage() {
               </div>
 
               {/* Bio Section */}
-              <div className="mb-4">
-                {editing ? (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <textarea
-                        value={bio}
-                        onChange={(e) => setBio(e.target.value)}
-                        placeholder="Tell us about yourself..."
-                        maxLength={200}
-                        rows={3}
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-slate-500 focus:border-transparent resize-none text-sm"
-                      />
-                      <span className="absolute bottom-2 right-2 text-xs text-gray-400">
-                        {bio.length}/200
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        onClick={handleSaveBio}
-                        size="sm"
-                        className="bg-slate-900 hover:bg-black transition-all"
-                      >
-                        <Check className="w-4 h-4 mr-1" />
-                        Save
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => {
-                          setEditing(false);
-                          setBio(profile.bio ?? "");
-                        }}
-                        size="sm"
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Cancel
-                      </Button>
-                    </div>
+              {editing ? (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <textarea
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      placeholder="Tell us about yourself..."
+                      maxLength={200}
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-slate-500 focus:border-transparent resize-none text-sm"
+                    />
+                    <span className="absolute bottom-2 right-2 text-xs text-gray-400">
+                      {bio.length}/200
+                    </span>
                   </div>
-                ) : (
-                  <div className="group">
-                    <div className="flex items-start justify-between">
-                      <p className="text-gray-700 flex-1">
-                        {profile.bio || (
-                          <span className="text-gray-400 italic">No bio yet. Click edit to add one!</span>
-                        )}
-                      </p>
-                      <Button 
-                        onClick={() => setEditing(true)} 
-                        variant="outline" 
-                        size="sm"
-                        className="ml-4 opacity-60 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Edit2 className="w-4 h-4 mr-1" />
-                        Edit
-                      </Button>
-                    </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleSaveBio}
+                      size="sm"
+                      className="bg-slate-900 hover:bg-black transition-all"
+                    >
+                      <Check className="w-4 h-4 mr-1" />
+                      Save
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setEditing(false);
+                        setBio(profile.bio ?? "");
+                      }}
+                      size="sm"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Cancel
+                    </Button>
                   </div>
-                )}
-              </div>
-
+                </div>
+              ) : (
+                <div className="group">
+                  <div className="flex items-start justify-between">
+                    <p className="text-gray-700 flex-1">
+                      {profile.bio || (
+                        <span className="text-gray-400 italic">No bio yet. Click edit to add one!</span>
+                      )}
+                    </p>
+                    <Button 
+                      onClick={() => setEditing(true)} 
+                      variant="outline" 
+                      size="sm"
+                      className="ml-4 opacity-60 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Edit2 className="w-4 h-4 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -276,21 +271,25 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent className="space-y-0 pt-3">
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
-              <span className="text-gray-600 text-sm font-medium">Email</span>
-              <span className="text-gray-900 text-sm">{profile.email}</span>
+              <span className="text-gray-600 text-sm font-medium">Username</span>
+              <span className="text-gray-900 text-sm">@{profile.username ?? "unknown"}</span>
             </div>
             <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">Full Name</span>
               <span className="text-gray-900 text-sm">{profile.full_name ?? "—"}</span>
             </div>
+            <div className="flex justify-between py-3 border-b hover:bg-gray-50 transition-colors px-2 rounded">
+              <span className="text-gray-600 text-sm font-medium">Email</span>
+              <span className="text-gray-900 text-sm">{profile.email ?? "—"}</span>
+            </div>
             <div className="flex justify-between py-3 hover:bg-gray-50 transition-colors px-2 rounded">
               <span className="text-gray-600 text-sm font-medium">Joined</span>
               <span className="text-gray-900 text-sm">
                 {profile.created_at
-                  ? new Date(profile.created_at).toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
+                  ? new Date(profile.created_at).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
                     })
                   : "—"}
               </span>
