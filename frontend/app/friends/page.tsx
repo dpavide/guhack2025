@@ -270,9 +270,9 @@ export default function FriendsPage() {
                   <div className="flex items-center gap-3">
                     {renderAvatar(r)}
                     <div>
-                      <p className="font-medium">{r.username}</p>
+                      <p className="font-medium">{(r.first_name ?? "") + (r.last_name ? ` ${r.last_name}` : "")}</p>
                       <p className="text-xs text-gray-500">
-                        {(r.first_name ?? "") + (r.last_name ? ` ${r.last_name}` : "")}
+                        {"@" + r.username}
                       </p>
                     </div>
                   </div>
@@ -359,9 +359,9 @@ export default function FriendsPage() {
                 <div className="flex items-center gap-3">
                   {renderAvatar(f)}
                   <div>
-                    <p className="font-medium">{f.username}</p>
+                    <p className="font-medium">{(f.first_name ?? "") + (f.last_name ? ` ${f.last_name}` : "")}</p>
                     <p className="text-xs text-gray-500">
-                      {(f.first_name ?? "") + (f.last_name ? ` ${f.last_name}` : "")}
+                      {"@" + f.username}
                     </p>
                   </div>
                 </div>
